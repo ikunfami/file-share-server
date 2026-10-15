@@ -470,16 +470,22 @@ def create_app(cfg):
             return "visitor"
         return None
 
+    seen_ips = set()
+
     @app.before_request
     def log_visit():
-        """每有一个访问请求，控制台打印一行（时间、IP、角色、路径）。"""
+        """每个访客只记录第一次访问（按 IP 去重），打印时间、IP、角色、路径。"""
         if request.path == "/favicon.ico":
             return None
+        ip = request.remote_addr
+        if ip in seen_ips:
+            return None
+        seen_ips.add(ip)
         label = {"admin": "管理员", "visitor": "访问者"}.get(
             session.get("role"), "未登录"
         )
         now = time.strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[访问] {now}  IP:{request.remote_addr}  {label}  {request.path}", flush=True)
+        print(f"[访问] {now}  IP:{ip}  {label}  {request.path}", flush=True)
         return None
 
     @app.before_request
