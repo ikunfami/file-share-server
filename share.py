@@ -24,7 +24,11 @@ from flask import (
     url_for,
 )
 
-BASE_DIR = Path(__file__).resolve().parent
+# PyInstaller 打包后 __file__ 指向临时解压目录，配置需放在 exe 所在目录
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
 
 DEFAULT_CONFIG = {
