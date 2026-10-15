@@ -36,6 +36,9 @@ else:
     CONFIG_DIR = BASE_DIR
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 
+# 当前版本号（发布新版本时同步修改，并打同名 git tag）
+VERSION = "1.0.2"
+
 DEFAULT_CONFIG = {
     "share_dir": str(BASE_DIR),
     "port": 8000,
@@ -261,6 +264,7 @@ LIST_PAGE = """<!DOCTYPE html>
   td.download a:hover { background: #667eea; color: #fff; }
   .empty { text-align: center; color: #aaa; padding: 40px 0; }
   .icon { margin-right: 8px; }
+  .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
   @media (max-width: 600px) {
     th.mtime, td.mtime { display: none; }
   }
@@ -299,6 +303,7 @@ LIST_PAGE = """<!DOCTYPE html>
   {% else %}
   <div class="empty">此文件夹为空</div>
   {% endif %}
+  <div class="footer">file-share-server v{{ version }}</div>
 </div>
 </body>
 </html>
@@ -400,6 +405,7 @@ SETTINGS_PAGE = """<!DOCTYPE html>
 
     <button type="submit">保存设置</button>
   </form>
+  <div class="footer" style="text-align:center;color:#bbb;font-size:12px;margin-top:16px;">file-share-server v{{ version }}</div>
 </div>
 <script>
 async function pickDir() {
@@ -554,6 +560,7 @@ def create_app(cfg):
             ok=ok,
             share_dir=cfg["share_dir"],
             visitor_enabled=cfg["visitor_enabled"],
+            version=VERSION,
         )
 
     @app.route("/")
@@ -606,6 +613,7 @@ def create_app(cfg):
             breadcrumb="".join(crumbs),
             is_admin=session.get("role") == "admin",
             password_on=protection_on(),
+            version=VERSION,
         )
 
     @app.route("/download/<path:rel>")
@@ -716,6 +724,7 @@ def main():
 
     port = cfg["port"]
     print("=" * 50)
+    print(f"  版本：v{VERSION}")
     print(f"  共享目录：{share_dir}")
     print(f"  本机访问：http://127.0.0.1:{port}")
     ip = lan_ip()
