@@ -56,8 +56,9 @@ USAGE_TEXT = """局域网文件共享工具 - 使用说明
 - 管理员密码：额外拥有「设置」页面，可修改分享目录、访问密码、管理员密码
 登录页输入哪个密码，就自动获得对应权限。
 
-【首次设置管理员密码】（只需一次）
-   py share.py --admin-password 你的密码
+【默认密码】（首次运行自动生成，建议尽快在设置页修改）
+- 访问密码：123456
+- 管理员密码：admin456
 
 【常用命令】
    py share.py                              按保存的配置启动
@@ -76,7 +77,7 @@ USAGE_TEXT = """局域网文件共享工具 - 使用说明
 
 
 def first_run_setup(cfg):
-    """首次使用：在桌面创建「分享文件夹」并放入使用说明，设为默认分享目录。"""
+    """首次使用：创建默认配置（双密码 + 端口8000），并在桌面创建「分享文件夹」及使用说明。"""
     if CONFIG_PATH.exists():
         return False
     desktop = Path.home() / "Desktop"
@@ -88,6 +89,10 @@ def first_run_setup(cfg):
     if not readme.exists():
         readme.write_text(USAGE_TEXT, encoding="utf-8-sig")
     cfg["share_dir"] = str(share)
+    cfg["port"] = 8000
+    cfg["visitor_enabled"] = True
+    cfg["visitor_hash"] = hash_password("123456")
+    cfg["admin_hash"] = hash_password("admin456")
     save_config(cfg)
     return True
 
