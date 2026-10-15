@@ -17,4 +17,4 @@ build/
 # 发布用 exe（入库供用户下载）
 !release/
 release/*
-!release/file-share-server.exe
+!release/fileShare.*.exe
