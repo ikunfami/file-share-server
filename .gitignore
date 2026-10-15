@@ -1,0 +1,9 @@
+# 运行时配置（含密码哈希，勿入库）
+config.json
+
+# 演示/测试数据
+test-share/
+test-share2/
+
+__pycache__/
+*.pyc
