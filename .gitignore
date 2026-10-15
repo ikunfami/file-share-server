@@ -13,3 +13,8 @@ __pycache__/
 dist/
 build/
 *.spec
+
+# 发布用 exe（入库供用户下载）
+!release/
+release/*
+!release/file-share-server.exe
