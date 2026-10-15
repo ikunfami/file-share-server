@@ -232,7 +232,7 @@ LIST_PAGE = """<!DOCTYPE html>
     font-family: "Microsoft YaHei", system-ui, sans-serif;
     background: #f4f6fa; color: #333;
   }
-  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 16px 80px; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
   header {
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 16px;
@@ -264,11 +264,7 @@ LIST_PAGE = """<!DOCTYPE html>
   td.download a:hover { background: #667eea; color: #fff; }
   .empty { text-align: center; color: #aaa; padding: 40px 0; }
   .icon { margin-right: 8px; }
-  .footer {
-    position: fixed; bottom: 0; left: 0; right: 0; height: 50px; line-height: 50px;
-    text-align: center; color: #bbb; font-size: 12px; margin: 0;
-    background: rgba(244, 246, 250, .9);
-  }
+  .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
   @media (max-width: 600px) {
     th.mtime, td.mtime { display: none; }
   }
@@ -325,7 +321,7 @@ SETTINGS_PAGE = """<!DOCTYPE html>
     font-family: "Microsoft YaHei", system-ui, sans-serif;
     background: #f4f6fa; color: #333;
   }
-  .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px 80px; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px; }
   header {
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 16px;
@@ -365,11 +361,7 @@ SETTINGS_PAGE = """<!DOCTYPE html>
   button.pickbtn:disabled { opacity: .55; cursor: default; }
   .msg-ok { color: #27ae60; font-size: 13px; margin-bottom: 16px; }
   .msg-err { color: #e74c3c; font-size: 13px; margin-bottom: 16px; }
-  .footer {
-    position: fixed; bottom: 0; left: 0; right: 0; height: 50px; line-height: 50px;
-    text-align: center; color: #bbb; font-size: 12px; margin: 0;
-    background: rgba(244, 246, 250, .9);
-  }
+  .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
   hr { border: none; border-top: 1px solid #f0f0f0; margin: 24px 0; }
 </style>
 </head>
