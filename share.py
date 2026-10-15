@@ -727,7 +727,10 @@ def main():
     print("=" * 50)
 
     app = create_app(cfg)
-    app.run(host="0.0.0.0", port=port, threaded=True)
+    # 使用 waitress 生产级 WSGI 服务器（避免 Flask 开发服务器的警告）
+    from waitress import serve
+
+    serve(app, host="0.0.0.0", port=port, threads=16)
 
 
 if __name__ == "__main__":
