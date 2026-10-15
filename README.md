@@ -23,7 +23,8 @@ py share.py
 
 - 在桌面创建「分享文件夹」（内含使用说明文档），并设为默认分享目录
 - 生成配置文件：端口 8000，默认开启密码保护
-- 配置保存在系统目录 `%APPDATA%\file-share-server\config.toml`（软件/exe 目录保持干净，不生成任何文件）
+- 生成配置文件 `config.toml`，端口 8000，默认开启密码保护
+- 配置位置分两种模式：**脚本直接运行**读项目根目录的 `config.toml`；**exe 运行**读 `%APPDATA%\file-share-server\config.toml`（exe 目录保持干净）
 - 默认密码 —— 访问密码 `123456`，管理员密码 `admin456`（建议尽快在设置页修改）
 
 启动后控制台会打印访问地址，例如：
@@ -71,7 +72,7 @@ py share.py
 py share.py --dir D:\照片 --port 9000 --password 123456 --admin-password admin123
 ```
 
-所有参数都会自动保存到 `%APPDATA%\file-share-server\config.toml`，之后直接运行 `py share.py` 即可按上次配置启动。也可以直接编辑该文件。
+所有参数都会自动保存到配置文件（脚本模式为项目目录 `config.toml`，exe 模式为 `%APPDATA%\file-share-server\config.toml`），之后直接运行即可按上次配置启动。也可以直接编辑该文件。
 
 ## 网页端功能
 

@@ -25,14 +25,15 @@ from flask import (
     url_for,
 )
 
-# PyInstaller 打包后 __file__ 指向临时解压目录，配置需放在 exe 所在目录
+# 配置位置分两种模式：
+# - 脚本直接运行（py share.py）：读取项目根目录的 config.toml
+# - PyInstaller 打包成 exe 运行：读取 %APPDATA%\file-share-server\config.toml，exe 目录保持干净
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).resolve().parent
+    CONFIG_DIR = Path(os.environ.get("APPDATA") or BASE_DIR) / "file-share-server"
 else:
     BASE_DIR = Path(__file__).resolve().parent
-
-# 配置统一保存在系统用户目录（%APPDATA%\file-share-server），软件/exe 目录保持干净
-CONFIG_DIR = Path(os.environ.get("APPDATA") or BASE_DIR) / "file-share-server"
+    CONFIG_DIR = BASE_DIR
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 
 DEFAULT_CONFIG = {
@@ -77,7 +78,7 @@ USAGE_TEXT = """局域网文件共享工具 - 使用说明
 
 【提示】
 - 设置页里点「选择目录」按钮可从系统中直接挑选文件夹
-- 配置保存在系统目录 %APPDATA%\\file-share-server\\config.toml，软件目录保持干净
+- 脚本运行时配置为软件目录下的 config.toml；exe 运行时配置在系统目录 %APPDATA%\\file-share-server\\config.toml
 - 请在内网/可信网络中使用
 """
 
