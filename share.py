@@ -11,6 +11,7 @@ import os
 import secrets
 import socket
 import sys
+import tomllib
 from pathlib import Path
 
 from flask import (
@@ -29,7 +30,10 @@ if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).resolve().parent
 else:
     BASE_DIR = Path(__file__).resolve().parent
-CONFIG_PATH = BASE_DIR / "config.json"
+
+# 配置统一保存在系统用户目录（%APPDATA%\file-share-server），软件/exe 目录保持干净
+CONFIG_DIR = Path(os.environ.get("APPDATA") or BASE_DIR) / "file-share-server"
+CONFIG_PATH = CONFIG_DIR / "config.toml"
 
 DEFAULT_CONFIG = {
     "share_dir": str(BASE_DIR),
@@ -73,7 +77,7 @@ USAGE_TEXT = """局域网文件共享工具 - 使用说明
 
 【提示】
 - 设置页里点「选择目录」按钮可从系统中直接挑选文件夹
-- 配置文件保存在软件目录的 config.json 中
+- 配置保存在系统目录 %APPDATA%\\file-share-server\\config.toml，软件目录保持干净
 - 请在内网/可信网络中使用
 """
 
@@ -105,23 +109,47 @@ def load_config():
     cfg = dict(DEFAULT_CONFIG)
     if CONFIG_PATH.exists():
         try:
-            data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            data = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
             if isinstance(data, dict):
-                # 兼容旧版字段名
-                if "password_enabled" in data:
-                    data["visitor_enabled"] = data.pop("password_enabled")
-                if "password_hash" in data:
-                    data["visitor_hash"] = data.pop("password_hash")
                 cfg.update({k: v for k, v in data.items() if k in cfg})
-        except (json.JSONDecodeError, OSError):
+        except (tomllib.TOMLDecodeError, OSError):
             pass
     return cfg
 
 
 def save_config(cfg):
-    CONFIG_PATH.write_text(
-        json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# 局域网文件共享工具配置文件",
+        "# 密码为 SHA-256 哈希值，请通过命令行参数或设置页面修改",
+        f"share_dir = {json.dumps(cfg['share_dir'], ensure_ascii=False)}",
+        f"port = {int(cfg['port'])}",
+        f"visitor_enabled = {'true' if cfg['visitor_enabled'] else 'false'}",
+        f"visitor_hash = {json.dumps(cfg['visitor_hash'])}",
+        f"admin_hash = {json.dumps(cfg['admin_hash'])}",
+        "",
+    ]
+    CONFIG_PATH.write_text("\n".join(lines), encoding="utf-8")
+
+
+def migrate_old_config():
+    """把旧版 config.json 迁移转换为 config.toml（软件目录与配置目录都检查）。"""
+    for old in (BASE_DIR / "config.json", CONFIG_DIR / "config.json"):
+        if not CONFIG_PATH.exists() and old.exists():
+            try:
+                data = json.loads(old.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    # 兼容旧版字段名
+                    if "password_enabled" in data:
+                        data["visitor_enabled"] = data.pop("password_enabled")
+                    if "password_hash" in data:
+                        data["visitor_hash"] = data.pop("password_hash")
+                    cfg = dict(DEFAULT_CONFIG)
+                    cfg.update({k: v for k, v in data.items() if k in cfg})
+                    save_config(cfg)
+                old.unlink()
+            except (json.JSONDecodeError, OSError):
+                pass
 
 
 def hash_password(password):
@@ -645,6 +673,7 @@ def main():
     parser.add_argument("--no-password", action="store_true", help="关闭访问密码保护")
     args = parser.parse_args()
 
+    migrate_old_config()
     cfg = load_config()
     if first_run_setup(cfg):
         print(f"首次使用：已在桌面创建分享文件夹：{cfg['share_dir']}")
@@ -677,7 +706,7 @@ def main():
 
     if changed:
         save_config(cfg)
-        print("配置已保存到 config.json")
+        print(f"配置已保存到 {CONFIG_PATH}")
 
     share_dir = Path(cfg["share_dir"])
     if not share_dir.is_dir():
