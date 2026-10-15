@@ -35,7 +35,61 @@ DEFAULT_CONFIG = {
     "admin_hash": "",
 }
 
+USAGE_TEXT = """局域网文件共享工具 - 使用说明
+================================
+
+【这是什么】
+本软件把「分享文件夹」共享到局域网，同一网络内的其他电脑、手机
+用浏览器打开网页即可查看文件列表并下载文件。
+
+【快速开始】
+1. 把要共享的文件复制/移动到本文件夹（支持子文件夹）
+2. 双击运行 share.py（或命令行执行：py share.py）
+3. 启动后窗口会显示两个地址：
+   - 本机访问：   http://127.0.0.1:8000
+   - 局域网访问： http://192.168.x.x:8000  （把这个发给同网络的人）
+4. 其他人用浏览器打开「局域网访问」地址即可查看和下载
+5. 按 Ctrl+C 停止服务
+
+【两种密码】
+- 访问密码：普通用户登录后只能浏览和下载
+- 管理员密码：额外拥有「设置」页面，可修改分享目录、访问密码、管理员密码
+登录页输入哪个密码，就自动获得对应权限。
+
+【首次设置管理员密码】（只需一次）
+   py share.py --admin-password 你的密码
+
+【常用命令】
+   py share.py                              按保存的配置启动
+   py share.py --password 123456            设置/更改访问密码
+   py share.py --no-password                关闭访问密码
+   py share.py --port 8080                  更改端口
+   py share.py --dir D:\\资料               更改分享目录
+
+【提示】
+- 设置页里点「选择目录」按钮可从系统中直接挑选文件夹
+- 配置文件保存在软件目录的 config.json 中
+- 请在内网/可信网络中使用
+"""
+
 # ---------------------------------------------------------------- 配置
+
+
+def first_run_setup(cfg):
+    """首次使用：在桌面创建「分享文件夹」并放入使用说明，设为默认分享目录。"""
+    if CONFIG_PATH.exists():
+        return False
+    desktop = Path.home() / "Desktop"
+    if not desktop.is_dir():
+        desktop = Path.home()
+    share = desktop / "分享文件夹"
+    share.mkdir(parents=True, exist_ok=True)
+    readme = share / "使用说明.txt"
+    if not readme.exists():
+        readme.write_text(USAGE_TEXT, encoding="utf-8-sig")
+    cfg["share_dir"] = str(share)
+    save_config(cfg)
+    return True
 
 
 def load_config():
@@ -583,6 +637,8 @@ def main():
     args = parser.parse_args()
 
     cfg = load_config()
+    if first_run_setup(cfg):
+        print(f"首次使用：已在桌面创建分享文件夹：{cfg['share_dir']}")
     changed = False
 
     if args.dir:
