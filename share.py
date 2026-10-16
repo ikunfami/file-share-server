@@ -46,6 +46,7 @@ DEFAULT_CONFIG = {
     "visitor_enabled": False,
     "visitor_password": "",
     "admin_password": "",
+    "share_enabled": True,
 }
 
 USAGE_TEXT = """局域网文件共享工具 - 使用说明
@@ -70,7 +71,7 @@ USAGE_TEXT = """局域网文件共享工具 - 使用说明
 登录页输入哪个密码，就自动获得对应权限。
 
 【默认密码】（首次运行自动生成，建议尽快在设置页修改）
-- 访问密码：123456
+- 访问密码：123456（默认关闭，可在设置页启用）
 - 管理员密码：admin456
 
 【常用命令】
@@ -103,9 +104,10 @@ def first_run_setup(cfg):
         readme.write_text(USAGE_TEXT, encoding="utf-8-sig")
     cfg["share_dir"] = str(share)
     cfg["port"] = 8000
-    cfg["visitor_enabled"] = True
+    cfg["visitor_enabled"] = False
     cfg["visitor_password"] = "123456"
     cfg["admin_password"] = "admin456"
+    cfg["share_enabled"] = True
     save_config(cfg)
     return True
 
@@ -132,6 +134,7 @@ def save_config(cfg):
         f"visitor_enabled = {'true' if cfg['visitor_enabled'] else 'false'}",
         f"visitor_password = {json.dumps(cfg['visitor_password'])}",
         f"admin_password = {json.dumps(cfg['admin_password'])}",
+        f"share_enabled = {'true' if cfg['share_enabled'] else 'false'}",
         "",
     ]
     CONFIG_PATH.write_text("\n".join(lines), encoding="utf-8")
@@ -299,7 +302,7 @@ LIST_PAGE = """<!DOCTYPE html>
       <td class="mtime">{{ it.mtime }}</td>
       <td class="download">
         {% if not it.is_dir %}
-        <a href="javascript:;" onclick="shareLink('{{ it.share_url }}')">分享</a>
+        {% if share_on %}<a href="javascript:;" onclick="shareLink('{{ it.share_url }}')">分享</a>{% endif %}
         <a href="{{ it.download_url }}">下载</a>
         {% endif %}
       </td>
@@ -429,6 +432,17 @@ SETTINGS_PAGE = """<!DOCTYPE html>
     <hr>
 
     <div class="field">
+      <label class="title">分享功能</label>
+      <label class="check">
+        <input type="checkbox" name="share_enabled" {% if share_enabled %}checked{% endif %}>
+        启用分享功能
+      </label>
+      <label class="hint">关闭后列表页不再显示「分享」按钮，已发出的分享链接也会失效</label>
+    </div>
+
+    <hr>
+
+    <div class="field">
       <label class="title">管理员密码</label>
       <input type="password" name="admin_password" placeholder="新管理员密码（留空则不修改）">
       <label class="hint">管理员可进入此设置页面</label>
@@ -517,6 +531,9 @@ SHARE_PAGE = """<!DOCTYPE html>
     {% if mode == "missing" %}
     <h1>😢 文件不存在</h1>
     <p class="sub">该文件不存在，或已被分享者移除<br>请联系分享者确认链接是否有效</p>
+    {% elif mode == "disabled" %}
+    <h1>🚫 分享已失效</h1>
+    <p class="sub">分享功能已被管理员关闭<br>请联系分享者重新开启或获取新的分享方式</p>
     {% else %}
     <h1>🔐 访问分享</h1>
     <p class="sub">此分享受密码保护<br>请输入访问密码继续</p>
@@ -663,10 +680,13 @@ def create_app(cfg):
                     ap = form.get("admin_password", "")
                     if ap:
                         cfg["admin_password"] = ap
+                    cfg["share_enabled"] = form.get("share_enabled") == "on"
                     save_config(cfg)
-                    # 密码变更后轮换会话密钥，使所有已登录会话（含分享链接带入的）立即失效
+                    # 密码变更后轮换会话密钥，使其他已登录会话（含分享链接带入的）立即失效；
+                    # 同时刷新当前管理员的会话，避免其本人被登出
                     if vp or ap:
                         app.secret_key = secrets.token_hex(32)
+                        session["role"] = "admin"
                     msg, ok = "设置已保存", True
         return render_template_string(
             SETTINGS_PAGE,
@@ -674,6 +694,7 @@ def create_app(cfg):
             ok=ok,
             share_dir=cfg["share_dir"],
             visitor_enabled=cfg["visitor_enabled"],
+            share_enabled=cfg["share_enabled"],
             version=VERSION,
         )
 
@@ -731,12 +752,20 @@ def create_app(cfg):
             breadcrumb="".join(crumbs),
             is_admin=session.get("role") == "admin",
             password_on=visitor_protection_on() or session.get("role") is not None,
+            share_on=cfg["share_enabled"],
             version=VERSION,
         )
 
     @app.route("/s/<path:rel>")
     def share(rel):
-        """分享链接：校验路径与密码，通过后文件直接下载、文件夹跳转到浏览页。"""
+        """分享链接：校验开关、路径与密码，通过后文件直接下载、文件夹跳转到浏览页。"""
+        if not cfg["share_enabled"]:
+            return (
+                render_template_string(
+                    SHARE_PAGE, mode="disabled", error=None, path=None
+                ),
+                410,
+            )
         root = Path(cfg["share_dir"]).resolve()
         target = safe_join(root, rel)
         if target is None or not target.exists():
@@ -887,6 +916,7 @@ def main():
         print(f"  局域网访问：http://{ip}:{port}")
     print(f"  访问密码：{'已开启' if cfg['visitor_enabled'] else '未开启'}")
     print(f"  管理员密码：{'已设置' if cfg['admin_password'] else '未设置'}")
+    print(f"  分享功能：{'已开启' if cfg['share_enabled'] else '已关闭'}")
     print("  按 Ctrl+C 停止服务")
     print("=" * 50)
 
