@@ -939,7 +939,7 @@ def run_tray(cfg, port):
     menu = pystray.Menu(
         pystray.MenuItem("打开", open_page, default=True),
         pystray.MenuItem("查看", show_console),
-        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("─" * 14, lambda icon, item: None, enabled=False),
         pystray.MenuItem("退出", quit_app),
     )
     tip = f"文件共享 {url}"
@@ -1015,19 +1015,11 @@ def main():
     print("  按 Ctrl+C 停止服务")
     print("=" * 50)
 
-    # 启用托盘时：拦截点 X 并直接隐藏控制台窗口；否则按原逻辑仅 exe 最小化
+    # 启用托盘时：拦截点 X（隐藏窗口不退出）；exe 启动后最小化窗口（可 --no-minimize 关闭）
     tray_on = not args.no_tray
     if tray_on:
         hook_console_close()
-        try:
-            import ctypes
-
-            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-            if hwnd:
-                ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
-        except Exception:
-            pass
-    elif not args.no_minimize and getattr(sys, "frozen", False):
+    if not args.no_minimize and getattr(sys, "frozen", False):
         try:
             import ctypes
 
