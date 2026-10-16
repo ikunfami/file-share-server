@@ -258,6 +258,7 @@ LIST_PAGE = """<!DOCTYPE html>
     border: 1px solid #667eea; border-radius: 6px; padding: 4px 10px;
   }
   td.download a:hover { background: #667eea; color: #fff; }
+  td.download a + a { margin-left: 8px; }
   .empty { text-align: center; color: #aaa; padding: 40px 0; }
   .icon { margin-right: 8px; }
   .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
@@ -297,6 +298,7 @@ LIST_PAGE = """<!DOCTYPE html>
       <td class="size">{{ it.size }}</td>
       <td class="mtime">{{ it.mtime }}</td>
       <td class="download">
+        <a href="javascript:;" onclick="shareLink('{{ it.share_url }}')">分享</a>
         {% if not it.is_dir %}<a href="{{ it.download_url }}">下载</a>{% endif %}
       </td>
     </tr>
@@ -307,6 +309,17 @@ LIST_PAGE = """<!DOCTYPE html>
   {% endif %}
   <div class="footer">file-share-server v{{ version }}</div>
 </div>
+<script>
+function shareLink(url) {
+  var ok = function() { alert('分享链接已复制到剪贴板'); };
+  var fail = function() { prompt('复制以下分享链接：', url); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(ok, fail);
+  } else {
+    fail();
+  }
+}
+</script>
 </body>
 </html>
 """
@@ -449,6 +462,60 @@ ERROR_PAGE = """<!DOCTYPE html>
 </html>
 """
 
+SHARE_PAGE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文件分享</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+  }
+  .card {
+    background: #fff; border-radius: 12px; padding: 40px 36px;
+    width: 90%; max-width: 380px; box-shadow: 0 12px 40px rgba(0,0,0,.25);
+    text-align: center;
+  }
+  h1 { font-size: 20px; margin-bottom: 10px; color: #333; }
+  p.sub { font-size: 14px; color: #888; margin-bottom: 24px; line-height: 1.7; }
+  input[type=password] {
+    width: 100%; padding: 12px 14px; font-size: 15px;
+    border: 1px solid #ddd; border-radius: 8px; outline: none;
+  }
+  input[type=password]:focus { border-color: #667eea; }
+  button {
+    width: 100%; margin-top: 16px; padding: 12px; font-size: 15px;
+    color: #fff; background: #667eea; border: none; border-radius: 8px;
+    cursor: pointer;
+  }
+  button:hover { background: #5a6fd6; }
+  .error { color: #e74c3c; font-size: 13px; margin-top: 14px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    {% if mode == "missing" %}
+    <h1>😢 文件不存在</h1>
+    <p class="sub">该文件不存在，或已被分享者移除<br>请联系分享者确认链接是否有效</p>
+    {% else %}
+    <h1>🔐 访问分享</h1>
+    <p class="sub">此分享受密码保护<br>请输入访问密码继续</p>
+    <form method="get" action="{{ path }}">
+      <input type="password" name="pwd" placeholder="访问密码" autofocus required>
+      <button type="submit">查看 / 下载</button>
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    </form>
+    {% endif %}
+  </div>
+</body>
+</html>
+"""
+
 # ---------------------------------------------------------------- 应用
 
 
@@ -499,7 +566,7 @@ def create_app(cfg):
 
     @app.before_request
     def require_login():
-        if request.endpoint in ("login", "static"):
+        if request.endpoint in ("login", "static", "share"):
             return None
         role = session.get("role")
         if request.endpoint == "settings":
@@ -613,6 +680,9 @@ def create_app(cfg):
             except OSError:
                 continue
             sub_rel = str(p.relative_to(root)).replace(os.sep, "/")
+            share_path = url_for("share", rel=sub_rel)
+            if visitor_protection_on() and cfg["visitor_password"]:
+                share_path += "?pwd=" + urllib.parse.quote(cfg["visitor_password"])
             items.append(
                 {
                     "name": p.name,
@@ -621,6 +691,7 @@ def create_app(cfg):
                     "mtime": time_str(st.st_mtime),
                     "url": url_for("index", rel=sub_rel),
                     "download_url": url_for("download_file", rel=sub_rel),
+                    "share_url": request.host_url.rstrip("/") + share_path,
                 }
             )
 
@@ -644,6 +715,42 @@ def create_app(cfg):
             password_on=visitor_protection_on() or session.get("role") is not None,
             version=VERSION,
         )
+
+    @app.route("/s/<path:rel>")
+    def share(rel):
+        """分享链接：校验路径与密码，通过后文件直接下载、文件夹跳转到浏览页。"""
+        root = Path(cfg["share_dir"]).resolve()
+        target = safe_join(root, rel)
+        if target is None or not target.exists():
+            return (
+                render_template_string(SHARE_PAGE, mode="missing", error=None, path=None),
+                404,
+            )
+        if visitor_protection_on() and session.get("role") not in ("admin", "visitor"):
+            pwd = request.args.get("pwd", "")
+            if pwd:
+                r = check_role(pwd)
+                if not r:
+                    return (
+                        render_template_string(
+                            SHARE_PAGE,
+                            mode="password",
+                            error="密码错误，请重试",
+                            path=request.path,
+                        ),
+                        401,
+                    )
+                session["role"] = r
+            else:
+                return (
+                    render_template_string(
+                        SHARE_PAGE, mode="password", error=None, path=request.path
+                    ),
+                    401,
+                )
+        if target.is_dir():
+            return redirect(url_for("index", rel=rel))
+        return send_file(target, as_attachment=True)
 
     @app.route("/download/<path:rel>")
     def download_file(rel):
