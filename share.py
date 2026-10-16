@@ -314,7 +314,7 @@ LIST_PAGE = """<!DOCTYPE html>
   {% else %}
   <div class="empty">此文件夹为空</div>
   {% endif %}
-  <div class="footer">file-share-server v{{ version }}</div>
+  <div class="footer">file-share-server v{{ version }} · by ikunfami</div>
 </div>
 <script>
 function copyText(text) {
@@ -452,7 +452,7 @@ SETTINGS_PAGE = """<!DOCTYPE html>
 
     <button type="submit">保存设置</button>
   </form>
-  <div class="footer">file-share-server v{{ version }}</div>
+  <div class="footer">file-share-server v{{ version }} · by ikunfami</div>
 </div>
 <script>
 async function pickDir() {
