@@ -957,6 +957,7 @@ def main():
     parser.add_argument("--admin-password", help="设置管理员密码")
     parser.add_argument("--no-password", action="store_true", help="关闭访问密码保护")
     parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
+    parser.add_argument("--no-minimize", action="store_true", help="启动后不自动最小化控制台窗口")
     parser.add_argument("--no-tray", action="store_true", help="不启用系统托盘图标")
     args = parser.parse_args()
 
@@ -1014,10 +1015,19 @@ def main():
     print("  按 Ctrl+C 停止服务")
     print("=" * 50)
 
-    # 启用托盘时：拦截点 X（隐藏窗口不退出）
+    # 启用托盘时：拦截点 X（隐藏窗口不退出）；exe 启动后最小化窗口（可 --no-minimize 关闭）
     tray_on = not args.no_tray
     if tray_on:
         hook_console_close()
+    if not args.no_minimize and getattr(sys, "frozen", False):
+        try:
+            import ctypes
+
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
+        except Exception:
+            pass
 
     # 启动后自动用默认浏览器打开局域网访问地址（可 --no-browser 关闭）
     if not args.no_browser:
