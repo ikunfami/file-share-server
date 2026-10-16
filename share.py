@@ -39,12 +39,6 @@ else:
     CONFIG_DIR = BASE_DIR
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 
-# 托盘图标文件：exe 模式取打包内置的，脚本模式取项目目录的
-if getattr(sys, "frozen", False):
-    ICON_FILE = Path(sys._MEIPASS) / "icon.ico"
-else:
-    ICON_FILE = BASE_DIR / "icon.ico"
-
 # 当前版本号（发布新版本时同步修改，并打同名 git tag）
 VERSION = "1.0.4"
 
@@ -862,52 +856,6 @@ def lan_ip():
     return ip
 
 
-# ---------------------------------------------------------------- 托盘
-
-
-def run_tray(cfg, port):
-    """系统托盘图标：右键菜单「打开 / 查看 / 退出」。无法使用时静默跳过。"""
-    try:
-        import ctypes
-
-        import pystray
-        from PIL import Image
-    except ImportError:
-        print("  提示：未安装 pystray，托盘功能不可用（pip install pystray）")
-        return
-
-    url = f"http://{lan_ip()}:{port}/"
-
-    def open_page(icon, item):
-        webbrowser.open(url)
-
-    def show_console(icon, item):
-        try:
-            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-            if hwnd:
-                ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-                ctypes.windll.user32.SetForegroundWindow(hwnd)
-        except Exception:
-            pass
-
-    def quit_app(icon, item):
-        icon.stop()
-        os._exit(0)
-
-    try:
-        image = Image.open(ICON_FILE)
-    except Exception:
-        image = Image.new("RGB", (64, 64), (102, 126, 234))
-
-    menu = pystray.Menu(
-        pystray.MenuItem("打开", open_page, default=True),
-        pystray.MenuItem("查看", show_console),
-        pystray.MenuItem("退出", quit_app),
-    )
-    tip = f"文件共享 {url}"
-    pystray.Icon("file-share-server", image, tip, menu).run()
-
-
 # ---------------------------------------------------------------- 入口
 
 
@@ -920,7 +868,6 @@ def main():
     parser.add_argument("--no-password", action="store_true", help="关闭访问密码保护")
     parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
     parser.add_argument("--no-minimize", action="store_true", help="启动后不自动最小化控制台窗口")
-    parser.add_argument("--no-tray", action="store_true", help="不启用系统托盘图标")
     args = parser.parse_args()
 
     migrate_old_config()
@@ -1005,14 +952,7 @@ def main():
     # 使用 waitress 生产级 WSGI 服务器（避免 Flask 开发服务器的警告）
     from waitress import serve
 
-    if not args.no_tray:
-        # 托盘消息循环跑在主线程，服务器跑在守护线程
-        threading.Thread(
-            target=serve, args=(app,), kwargs={"host": "0.0.0.0", "port": port, "threads": 16}, daemon=True
-        ).start()
-        run_tray(cfg, port)
-    else:
-        serve(app, host="0.0.0.0", port=port, threads=16)
+    serve(app, host="0.0.0.0", port=port, threads=16)
 
 
 if __name__ == "__main__":
