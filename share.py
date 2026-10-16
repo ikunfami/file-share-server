@@ -5,7 +5,6 @@
 """
 
 import argparse
-import hashlib
 import json
 import os
 import secrets
@@ -13,6 +12,7 @@ import socket
 import sys
 import time
 import tomllib
+import urllib.parse
 from pathlib import Path
 
 from flask import (
@@ -44,8 +44,8 @@ DEFAULT_CONFIG = {
     "share_dir": str(BASE_DIR),
     "port": 8000,
     "visitor_enabled": False,
-    "visitor_hash": "",
-    "admin_hash": "",
+    "visitor_password": "",
+    "admin_password": "",
 }
 
 USAGE_TEXT = """局域网文件共享工具 - 使用说明
@@ -104,8 +104,8 @@ def first_run_setup(cfg):
     cfg["share_dir"] = str(share)
     cfg["port"] = 8000
     cfg["visitor_enabled"] = True
-    cfg["visitor_hash"] = hash_password("123456")
-    cfg["admin_hash"] = hash_password("admin456")
+    cfg["visitor_password"] = "123456"
+    cfg["admin_password"] = "admin456"
     save_config(cfg)
     return True
 
@@ -126,12 +126,12 @@ def save_config(cfg):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     lines = [
         "# 局域网文件共享工具配置文件",
-        "# 密码为 SHA-256 哈希值，请通过命令行参数或设置页面修改",
+        "# 密码以明文保存（用于登录校验和生成分享链接），请妥善保管此文件",
         f"share_dir = {json.dumps(cfg['share_dir'], ensure_ascii=False)}",
         f"port = {int(cfg['port'])}",
         f"visitor_enabled = {'true' if cfg['visitor_enabled'] else 'false'}",
-        f"visitor_hash = {json.dumps(cfg['visitor_hash'])}",
-        f"admin_hash = {json.dumps(cfg['admin_hash'])}",
+        f"visitor_password = {json.dumps(cfg['visitor_password'])}",
+        f"admin_password = {json.dumps(cfg['admin_password'])}",
         "",
     ]
     CONFIG_PATH.write_text("\n".join(lines), encoding="utf-8")
@@ -144,21 +144,16 @@ def migrate_old_config():
             try:
                 data = json.loads(old.read_text(encoding="utf-8"))
                 if isinstance(data, dict):
-                    # 兼容旧版字段名
+                    # 兼容旧版字段名；旧哈希密码无法还原，丢弃后需重新设置
                     if "password_enabled" in data:
                         data["visitor_enabled"] = data.pop("password_enabled")
-                    if "password_hash" in data:
-                        data["visitor_hash"] = data.pop("password_hash")
+                    data.pop("password_hash", None)
                     cfg = dict(DEFAULT_CONFIG)
                     cfg.update({k: v for k, v in data.items() if k in cfg})
                     save_config(cfg)
                 old.unlink()
             except (json.JSONDecodeError, OSError):
                 pass
-
-
-def hash_password(password):
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------- 安全
@@ -463,21 +458,24 @@ def create_app(cfg):
 
     def visitor_protection_on():
         """访问密码是否开启（决定普通用户浏览是否需要登录）。"""
-        return bool(cfg["visitor_enabled"] and cfg["visitor_hash"])
+        return bool(cfg["visitor_enabled"] and cfg["visitor_password"])
 
     def admin_configured():
         """是否设置了管理员密码（设置页始终需要管理员登录）。"""
-        return bool(cfg["admin_hash"])
+        return bool(cfg["admin_password"])
 
     def login_available():
         return visitor_protection_on() or admin_configured()
 
     def check_role(pwd):
-        """根据输入的密码判定角色：admin / visitor / None。"""
-        h = hash_password(pwd)
-        if cfg["admin_hash"] and h == cfg["admin_hash"]:
+        """根据输入的密码判定角色：admin / visitor / None（明文比对）。"""
+        if cfg["admin_password"] and pwd == cfg["admin_password"]:
             return "admin"
-        if cfg["visitor_enabled"] and cfg["visitor_hash"] and h == cfg["visitor_hash"]:
+        if (
+            cfg["visitor_enabled"]
+            and cfg["visitor_password"]
+            and pwd == cfg["visitor_password"]
+        ):
             return "visitor"
         return None
 
@@ -574,15 +572,15 @@ def create_app(cfg):
             if ok:
                 vp = form.get("visitor_password", "")
                 ve = form.get("visitor_enabled") == "on"
-                if ve and not vp and not cfg["visitor_hash"]:
+                if ve and not vp and not cfg["visitor_password"]:
                     msg, ok = "启用访问密码前，请先设置一个访问密码", False
                 else:
                     cfg["visitor_enabled"] = ve
                     if vp:
-                        cfg["visitor_hash"] = hash_password(vp)
+                        cfg["visitor_password"] = vp
                     ap = form.get("admin_password", "")
                     if ap:
-                        cfg["admin_hash"] = hash_password(ap)
+                        cfg["admin_password"] = ap
                     save_config(cfg)
                     msg, ok = "设置已保存", True
         return render_template_string(
@@ -734,14 +732,14 @@ def main():
         changed = True
     if args.password:
         cfg["visitor_enabled"] = True
-        cfg["visitor_hash"] = hash_password(args.password)
+        cfg["visitor_password"] = args.password
         changed = True
     if args.admin_password:
-        cfg["admin_hash"] = hash_password(args.admin_password)
+        cfg["admin_password"] = args.admin_password
         changed = True
     if args.no_password:
         cfg["visitor_enabled"] = False
-        cfg["visitor_hash"] = ""
+        cfg["visitor_password"] = ""
         changed = True
 
     if changed:
@@ -762,7 +760,7 @@ def main():
     if ip != "127.0.0.1":
         print(f"  局域网访问：http://{ip}:{port}")
     print(f"  访问密码：{'已开启' if cfg['visitor_enabled'] else '未开启'}")
-    print(f"  管理员密码：{'已设置' if cfg['admin_hash'] else '未设置'}")
+    print(f"  管理员密码：{'已设置' if cfg['admin_password'] else '未设置'}")
     print("  按 Ctrl+C 停止服务")
     print("=" * 50)
 
