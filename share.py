@@ -864,21 +864,46 @@ def lan_ip():
 
 # ---------------------------------------------------------------- 托盘
 
+# 拦截控制台窗口「关闭」按钮的回调引用（防止被垃圾回收导致崩溃）
+_wndproc_ref = None
+_original_wndproc = None
 
-class _NullWriter:
-    def write(self, s):
+
+def hook_console_close():
+    """拦截控制台窗口的 WM_CLOSE（点 X）：改为隐藏窗口，退出只能走托盘菜单。"""
+    global _wndproc_ref, _original_wndproc
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if not hwnd:
+            return
+        GWL_WNDPROC = -4
+        WM_CLOSE = 0x0010
+
+        WNDPROC = ctypes.WINFUNCTYPE(
+            wintypes.LPARAM, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
+        )
+        _original_wndproc = user32.GetWindowLongPtrW(hwnd, GWL_WNDPROC)
+
+        def _wndproc(h, msg, wparam, lparam):
+            if msg == WM_CLOSE:
+                user32.ShowWindow(h, 0)  # SW_HIDE
+                return 0
+            return user32.CallWindowProcW(_original_wndproc, h, msg, wparam, lparam)
+
+        _wndproc_ref = WNDPROC(_wndproc)
+        user32.SetWindowLongPtrW(
+            hwnd, GWL_WNDPROC, ctypes.cast(_wndproc_ref, ctypes.c_void_p)
+        )
+    except Exception:
         pass
 
-    def flush(self):
-        pass
 
-
-_console_out = None
-
-
-def ensure_console():
-    """无控制台（windowed exe）时按需创建控制台并接管输出；已有控制台则唤出。"""
-    global _console_out
+def show_console():
+    """唤出（还原并置顶）控制台窗口。"""
     try:
         import ctypes
 
@@ -887,27 +912,8 @@ def ensure_console():
         if hwnd:
             user32.ShowWindow(hwnd, 9)  # SW_RESTORE
             user32.SetForegroundWindow(hwnd)
-            return
-        ctypes.windll.kernel32.AllocConsole()
-        _console_out = open("CONOUT$", "w", encoding="utf-8", errors="replace", buffering=1)
-        sys.stdout = _console_out
-        sys.stderr = _console_out
-        # 让 logging（waitress 等）已存在的 StreamHandler 也指向新控制台
-        import logging
-
-        for handler in logging.getLogger().handlers + logging.getLogger("waitress").handlers:
-            if isinstance(handler, logging.StreamHandler):
-                handler.stream = _console_out
-        print("=" * 40)
-        print("  文件共享服务运行日志（关闭本窗口不会停止服务）")
-        print("=" * 40)
     except Exception:
         pass
-
-
-def show_console():
-    """唤出（必要时创建）控制台窗口。"""
-    ensure_console()
 
 
 def run_tray(cfg, port):
@@ -1016,14 +1022,10 @@ def main():
     print("  按 Ctrl+C 停止服务")
     print("=" * 50)
 
-    # windowed exe 无控制台：输出先丢弃，点托盘「查看」时动态创建控制台
-    if getattr(sys, "frozen", False):
-        if sys.stdout is None:
-            sys.stdout = _NullWriter()
-        if sys.stderr is None:
-            sys.stderr = _NullWriter()
-    if args.no_tray and getattr(sys, "frozen", False):
-        print("提示：exe 以 --no-tray 运行时没有窗口也没有托盘，停止请在任务管理器结束进程")
+    # 启用托盘时：拦截点 X（隐藏窗口不退出）
+    tray_on = not args.no_tray
+    if tray_on:
+        hook_console_close()
 
     # 启动后自动用默认浏览器打开局域网访问地址（可 --no-browser 关闭）
     if not args.no_browser:
