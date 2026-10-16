@@ -4,6 +4,28 @@
 
 支持双角色密码：**访问密码**（普通用户，只能看列表和下载）和**管理员密码**（额外拥有一个设置页面，可随时修改分享目录、访问密码、管理员密码、分享功能开关）。
 
+## 界面预览
+
+**文件列表**：浏览共享目录，文件支持「分享 / 下载」，文件夹可逐层进入
+
+![文件列表](docs/screenshots/list.png)
+
+**子目录浏览**：带面包屑导航，随时返回上级
+
+![子目录](docs/screenshots/subfolder.png)
+
+**访问分享**：打开分享链接，密码正确自动下载，错误可重试
+
+![访问分享](docs/screenshots/share.png)
+
+**设置页面**（管理员）：分享目录（支持系统对话框选择）、访问密码、分享功能开关、管理员密码
+
+![设置页面](docs/screenshots/settings.png)
+
+**登录页面**（访问密码开启时）
+
+![登录页面](docs/screenshots/login.png)
+
 ## 下载即用（推荐）
 
 从 [GitHub Releases](https://github.com/ikunfami/file-share-server/releases) 下载最新的 `fileShare.x.x.x.exe`，放到任意目录**双击运行**即可，无需安装 Python。
