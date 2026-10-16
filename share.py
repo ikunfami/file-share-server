@@ -252,7 +252,7 @@ LIST_PAGE = """<!DOCTYPE html>
   td.name a { color: #333; text-decoration: none; }
   td.name a:hover { color: #667eea; }
   td.size, td.mtime { color: #999; white-space: nowrap; }
-  td.download { text-align: right; }
+  td.download { text-align: right; white-space: nowrap; }
   td.download a {
     color: #667eea; text-decoration: none; font-size: 13px;
     border: 1px solid #667eea; border-radius: 6px; padding: 4px 10px;
@@ -313,7 +313,7 @@ LIST_PAGE = """<!DOCTYPE html>
 </div>
 <script>
 function shareLink(url) {
-  var ok = function() { alert('分享链接已复制到剪贴板：\n\n' + url); };
+  var ok = function() { alert('分享链接已复制到剪贴板：\\n\\n' + url); };
   var fail = function() { prompt('复制以下分享链接：', url); };
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(url).then(ok, fail);
