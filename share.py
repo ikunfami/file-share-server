@@ -173,39 +173,6 @@ def safe_join(root, rel):
     return candidate
 
 
-# ---------------------------------------------------------------- 文件类型图标
-
-# 静态目录：脚本模式用项目内 static，打包成 exe 时用 PyInstaller 内置的 static（--add-data "static;static"）
-if getattr(sys, "frozen", False):
-    STATIC_DIR = Path(sys._MEIPASS) / "static"
-else:
-    STATIC_DIR = BASE_DIR / "static"
-
-# 扩展名 → 图标文件（static 目录内）
-ICON_IMAGES = "jpeg jpg png gif bmp webp svg ico tif tiff"
-ICON_VIDEOS = "mp4 mkv avi mov wmv flv webm m4v ts rmvb"
-ICON_DOCS = "txt md doc docx xls xlsx ppt pptx pdf csv log json xml toml ini conf cfg htm html chm epub"
-ICON_APPS = "exe msi msix bat cmd ps1 com scr"
-
-EXT_TO_ICON = {}
-for _exts, _icon in (
-    (ICON_IMAGES, "1.jpeg"),
-    (ICON_VIDEOS, "2.jpeg"),
-    (ICON_DOCS, "3.jpeg"),
-    (ICON_APPS, "5.jpeg"),
-):
-    for _e in _exts.split():
-        EXT_TO_ICON[_e] = _icon
-
-ICON_FOLDER = "4.jpeg"
-
-
-def icon_for(path, is_dir):
-    if is_dir:
-        return ICON_FOLDER
-    return EXT_TO_ICON.get(path.suffix.lower().lstrip("."), "")
-
-
 # ---------------------------------------------------------------- 页面
 
 LOGIN_PAGE = """<!DOCTYPE html>
@@ -297,7 +264,7 @@ LIST_PAGE = """<!DOCTYPE html>
   }
   td.download a:hover { background: #667eea; color: #fff; }
   .empty { text-align: center; color: #aaa; padding: 40px 0; }
-  img.icon { width: 20px; height: 20px; vertical-align: -4px; margin-right: 8px; }
+  .icon { margin-right: 8px; }
   .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
   @media (max-width: 600px) {
     th.mtime, td.mtime { display: none; }
@@ -326,15 +293,10 @@ LIST_PAGE = """<!DOCTYPE html>
     {% for it in items %}
     <tr>
       <td class="name">
-        {% if it.icon %}
-        <img class="icon" src="{{ it.icon }}" alt="">
-        {% else %}
-        <span style="margin-right:8px">📄</span>
-        {% endif %}
         {% if it.is_dir %}
-        <a href="{{ it.url }}">{{ it.name }}</a>
+        <a href="{{ it.url }}"><span class="icon">📁</span>{{ it.name }}</a>
         {% else %}
-        {{ it.name }}
+        <span class="icon">📄</span>{{ it.name }}
         {% endif %}
       </td>
       <td class="size">{{ it.size }}</td>
@@ -496,11 +458,7 @@ ERROR_PAGE = """<!DOCTYPE html>
 
 
 def create_app(cfg):
-    app = Flask(
-        __name__,
-        static_folder=str(STATIC_DIR),
-        static_url_path="/static",
-    )
+    app = Flask(__name__)
     app.secret_key = secrets.token_hex(32)
 
     def visitor_protection_on():
@@ -657,7 +615,6 @@ def create_app(cfg):
             except OSError:
                 continue
             sub_rel = str(p.relative_to(root)).replace(os.sep, "/")
-            icon_name = icon_for(p, p.is_dir())
             items.append(
                 {
                     "name": p.name,
@@ -666,7 +623,6 @@ def create_app(cfg):
                     "mtime": time_str(st.st_mtime),
                     "url": url_for("index", rel=sub_rel),
                     "download_url": url_for("download_file", rel=sub_rel),
-                    "icon": url_for("static", filename=icon_name) if icon_name else "",
                 }
             )
 
