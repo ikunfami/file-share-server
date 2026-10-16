@@ -864,6 +864,43 @@ def lan_ip():
 
 # ---------------------------------------------------------------- 托盘
 
+# 拦截控制台窗口「关闭」按钮的全局引用（防止被垃圾回收导致崩溃）
+_wndproc_ref = None
+_original_wndproc = None
+
+
+def hook_console_close():
+    """拦截控制台窗口的 WM_CLOSE（点 X）：改为隐藏窗口，退出只能走托盘菜单。"""
+    global _wndproc_ref, _original_wndproc
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if not hwnd:
+            return
+        GWL_WNDPROC = -4
+        WM_CLOSE = 0x0010
+
+        WNDPROC = ctypes.WINFUNCTYPE(
+            wintypes.LPARAM, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
+        )
+        _original_wndproc = user32.GetWindowLongPtrW(hwnd, GWL_WNDPROC)
+
+        def _wndproc(h, msg, wparam, lparam):
+            if msg == WM_CLOSE:
+                user32.ShowWindow(h, 0)  # SW_HIDE
+                return 0
+            return user32.CallWindowProcW(_original_wndproc, h, msg, wparam, lparam)
+
+        _wndproc_ref = WNDPROC(_wndproc)
+        user32.SetWindowLongPtrW(
+            hwnd, GWL_WNDPROC, ctypes.cast(_wndproc_ref, ctypes.c_void_p)
+        )
+    except Exception:
+        pass
+
 
 def run_tray(cfg, port):
     """系统托盘图标：右键菜单「打开 / 查看 / 退出」。无法使用时静默跳过。"""
@@ -902,6 +939,7 @@ def run_tray(cfg, port):
     menu = pystray.Menu(
         pystray.MenuItem("打开", open_page, default=True),
         pystray.MenuItem("查看", show_console),
+        pystray.Menu.SEPARATOR,
         pystray.MenuItem("退出", quit_app),
     )
     tip = f"文件共享 {url}"
@@ -977,8 +1015,19 @@ def main():
     print("  按 Ctrl+C 停止服务")
     print("=" * 50)
 
-    # 启动后自动最小化控制台窗口（可 --no-minimize 关闭）
-    if not args.no_minimize and getattr(sys, "frozen", False):
+    # 启用托盘时：拦截点 X 并直接隐藏控制台窗口；否则按原逻辑仅 exe 最小化
+    tray_on = not args.no_tray
+    if tray_on:
+        hook_console_close()
+        try:
+            import ctypes
+
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+        except Exception:
+            pass
+    elif not args.no_minimize and getattr(sys, "frozen", False):
         try:
             import ctypes
 
