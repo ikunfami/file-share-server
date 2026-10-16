@@ -313,7 +313,7 @@ LIST_PAGE = """<!DOCTYPE html>
 </div>
 <script>
 function shareLink(url) {
-  var ok = function() { alert('分享链接已复制到剪贴板'); };
+  var ok = function() { alert('分享链接已复制到剪贴板：\n\n' + url); };
   var fail = function() { prompt('复制以下分享链接：', url); };
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(url).then(ok, fail);
