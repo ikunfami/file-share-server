@@ -455,11 +455,16 @@ def create_app(cfg):
     app = Flask(__name__)
     app.secret_key = secrets.token_hex(32)
 
-    def protection_on():
-        """是否有任一密码启用（决定是否需要登录）。"""
-        return bool(cfg["admin_hash"]) or bool(
-            cfg["visitor_enabled"] and cfg["visitor_hash"]
-        )
+    def visitor_protection_on():
+        """访问密码是否开启（决定普通用户浏览是否需要登录）。"""
+        return bool(cfg["visitor_enabled"] and cfg["visitor_hash"])
+
+    def admin_configured():
+        """是否设置了管理员密码（设置页始终需要管理员登录）。"""
+        return bool(cfg["admin_hash"])
+
+    def login_available():
+        return visitor_protection_on() or admin_configured()
 
     def check_role(pwd):
         """根据输入的密码判定角色：admin / visitor / None。"""
@@ -496,10 +501,10 @@ def create_app(cfg):
         if request.endpoint == "settings":
             if role == "admin":
                 return None
-            if protection_on():
+            if admin_configured():
                 return redirect(url_for("login", next=request.path))
             abort(403)
-        if protection_on():
+        if visitor_protection_on():
             if role in ("admin", "visitor"):
                 return None
             return redirect(url_for("login", next=request.path))
@@ -507,7 +512,7 @@ def create_app(cfg):
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
-        if not protection_on():
+        if not login_available():
             return redirect(url_for("index"))
         error = None
         if request.method == "POST":
@@ -524,7 +529,7 @@ def create_app(cfg):
     @app.route("/logout")
     def logout():
         session.clear()
-        return redirect(url_for("login") if protection_on() else url_for("index"))
+        return redirect(url_for("login") if login_available() else url_for("index"))
 
     @app.route("/pick-dir", methods=["POST"])
     def pick_dir():
@@ -632,7 +637,7 @@ def create_app(cfg):
             items=items,
             breadcrumb="".join(crumbs),
             is_admin=session.get("role") == "admin",
-            password_on=protection_on(),
+            password_on=visitor_protection_on() or session.get("role") is not None,
             version=VERSION,
         )
 
