@@ -83,8 +83,9 @@ py share.py
 | `--admin-password` | 设置管理员密码 | `py share.py --admin-password admin123` |
 | `--no-password` | 关闭访问密码保护 | `py share.py --no-password` |
 | `--no-browser` | 启动后不自动打开浏览器 | `py share.py --no-browser` |
+| `--no-minimize` | 启动后不自动最小化窗口（仅 exe） | `py share.py --no-minimize` |
 
-启动后默认会自动用系统默认浏览器打开**局域网访问地址**（无局域网 IP 时打开本机地址），加 `--no-browser` 可关闭。
+启动后默认会自动用系统默认浏览器打开**局域网访问地址**（无局域网 IP 时打开本机地址），加 `--no-browser` 可关闭。exe 运行时控制台窗口会自动最小化到任务栏（不影响服务运行），加 `--no-minimize` 可关闭。
 
 所有参数都会自动保存到配置文件，之后直接运行即可按上次配置启动。也可以直接编辑该文件。
 
