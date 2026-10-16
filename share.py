@@ -38,7 +38,7 @@ else:
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 
 # 当前版本号（发布新版本时同步修改，并打同名 git tag）
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 
 DEFAULT_CONFIG = {
     "share_dir": str(BASE_DIR),
