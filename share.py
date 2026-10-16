@@ -298,8 +298,10 @@ LIST_PAGE = """<!DOCTYPE html>
       <td class="size">{{ it.size }}</td>
       <td class="mtime">{{ it.mtime }}</td>
       <td class="download">
+        {% if not it.is_dir %}
         <a href="javascript:;" onclick="shareLink('{{ it.share_url }}')">分享</a>
-        {% if not it.is_dir %}<a href="{{ it.download_url }}">下载</a>{% endif %}
+        <a href="{{ it.download_url }}">下载</a>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}
@@ -649,6 +651,9 @@ def create_app(cfg):
                     if ap:
                         cfg["admin_password"] = ap
                     save_config(cfg)
+                    # 密码变更后轮换会话密钥，使所有已登录会话（含分享链接带入的）立即失效
+                    if vp or ap:
+                        app.secret_key = secrets.token_hex(32)
                     msg, ok = "设置已保存", True
         return render_template_string(
             SETTINGS_PAGE,
