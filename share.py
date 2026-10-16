@@ -744,9 +744,10 @@ def create_app(cfg):
                 render_template_string(SHARE_PAGE, mode="missing", error=None, path=None),
                 404,
             )
-        if visitor_protection_on() and session.get("role") not in ("admin", "visitor"):
+        if visitor_protection_on():
             pwd = request.args.get("pwd", "")
             if pwd:
+                # URL 显式携带密码：每次都严格校验（即使已有登录会话）
                 r = check_role(pwd)
                 if not r:
                     return (
@@ -759,7 +760,7 @@ def create_app(cfg):
                         401,
                     )
                 session["role"] = r
-            else:
+            elif session.get("role") not in ("admin", "visitor"):
                 return (
                     render_template_string(
                         SHARE_PAGE, mode="password", error=None, path=request.path
