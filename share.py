@@ -276,8 +276,14 @@ LIST_PAGE = """<!DOCTYPE html>
   <header>
     <h1>📂 文件共享</h1>
     <div class="toplinks">
-      {% if is_admin %}<a class="settings" href="{{ url_for('settings') }}">⚙️ 设置</a>{% endif %}
-      {% if password_on %}<a href="{{ url_for('logout') }}">退出登录</a>{% endif %}
+      {% if is_admin %}
+      <a class="settings" href="{{ url_for('settings') }}">⚙️ 设置</a>
+      <a href="{{ url_for('logout') }}">退出登录</a>
+      {% elif not password_on %}
+      <a class="settings" href="{{ url_for('login', next=request.path) }}">管理员登录</a>
+      {% else %}
+      <a href="{{ url_for('logout') }}">退出登录</a>
+      {% endif %}
     </div>
   </header>
   <div class="breadcrumb">当前位置：{{ breadcrumb | safe }}</div>
