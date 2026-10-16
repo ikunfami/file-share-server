@@ -864,7 +864,7 @@ def lan_ip():
 
 # ---------------------------------------------------------------- 托盘
 
-# 拦截控制台窗口「关闭」按钮的全局引用（防止被垃圾回收导致崩溃）
+# 拦截控制台窗口「关闭」按钮的回调引用（防止被垃圾回收导致崩溃）
 _wndproc_ref = None
 _original_wndproc = None
 
@@ -902,6 +902,20 @@ def hook_console_close():
         pass
 
 
+def show_console():
+    """唤出（还原并置顶）控制台窗口。"""
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+    except Exception:
+        pass
+
+
 def run_tray(cfg, port):
     """系统托盘图标：右键菜单「打开 / 查看 / 退出」。无法使用时静默跳过。"""
     try:
@@ -918,14 +932,8 @@ def run_tray(cfg, port):
     def open_page(icon, item):
         webbrowser.open(url)
 
-    def show_console(icon, item):
-        try:
-            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-            if hwnd:
-                ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-                ctypes.windll.user32.SetForegroundWindow(hwnd)
-        except Exception:
-            pass
+    def on_show_console(icon, item):
+        show_console()
 
     def quit_app(icon, item):
         icon.stop()
@@ -938,7 +946,7 @@ def run_tray(cfg, port):
 
     menu = pystray.Menu(
         pystray.MenuItem("打开", open_page, default=True),
-        pystray.MenuItem("查看", show_console),
+        pystray.MenuItem("查看", on_show_console),
         pystray.MenuItem("─" * 14, lambda icon, item: None, enabled=False),
         pystray.MenuItem("退出", quit_app),
     )
