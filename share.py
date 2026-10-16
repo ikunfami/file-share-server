@@ -312,14 +312,27 @@ LIST_PAGE = """<!DOCTYPE html>
   <div class="footer">file-share-server v{{ version }}</div>
 </div>
 <script>
-function shareLink(url) {
-  var ok = function() { alert('分享链接已复制到剪贴板：\\n\\n' + url); };
-  var fail = function() { prompt('复制以下分享链接：', url); };
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(url).then(ok, fail);
-  } else {
-    fail();
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
   }
+  return new Promise(function(resolve, reject) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy') ? resolve() : reject(); }
+    catch (e) { reject(e); }
+    document.body.removeChild(ta);
+  });
+}
+function shareLink(url) {
+  copyText(url).then(
+    function() { alert('分享链接已复制到剪贴板：\\n\\n' + url); },
+    function() { prompt('自动复制失败，请手动复制：', url); }
+  );
 }
 </script>
 </body>
