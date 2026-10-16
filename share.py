@@ -923,9 +923,10 @@ def main():
     print("  按 Ctrl+C 停止服务")
     print("=" * 50)
 
-    # 启动后自动用默认浏览器打开本机访问地址（可 --no-browser 关闭）
+    # 启动后自动用默认浏览器打开局域网访问地址（可 --no-browser 关闭）
     if not args.no_browser:
-        url = f"http://127.0.0.1:{port}/"
+        open_ip = lan_ip()
+        url = f"http://{open_ip}:{port}/"
         def _open_browser():
             time.sleep(1.2)  # 等待 waitress 绑定端口
             try:
