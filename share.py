@@ -10,9 +10,11 @@ import os
 import secrets
 import socket
 import sys
+import threading
 import time
 import tomllib
 import urllib.parse
+import webbrowser
 from pathlib import Path
 
 from flask import (
@@ -864,6 +866,7 @@ def main():
     parser.add_argument("--password", help="设置访问密码并开启访问密码保护")
     parser.add_argument("--admin-password", help="设置管理员密码")
     parser.add_argument("--no-password", action="store_true", help="关闭访问密码保护")
+    parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
     args = parser.parse_args()
 
     migrate_old_config()
@@ -919,6 +922,18 @@ def main():
     print(f"  分享功能：{'已开启' if cfg['share_enabled'] else '已关闭'}")
     print("  按 Ctrl+C 停止服务")
     print("=" * 50)
+
+    # 启动后自动用默认浏览器打开本机访问地址（可 --no-browser 关闭）
+    if not args.no_browser:
+        url = f"http://127.0.0.1:{port}/"
+        def _open_browser():
+            time.sleep(1.2)  # 等待 waitress 绑定端口
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+        threading.Thread(target=_open_browser, daemon=True).start()
+        print(f"  已在默认浏览器打开：{url}")
 
     app = create_app(cfg)
     # 使用 waitress 生产级 WSGI 服务器（避免 Flask 开发服务器的警告）

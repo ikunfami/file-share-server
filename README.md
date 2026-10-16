@@ -82,6 +82,9 @@ py share.py
 | `--password` | 设置访问密码并开启访问保护 | `py share.py --password 123456` |
 | `--admin-password` | 设置管理员密码 | `py share.py --admin-password admin123` |
 | `--no-password` | 关闭访问密码保护 | `py share.py --no-password` |
+| `--no-browser` | 启动后不自动打开浏览器 | `py share.py --no-browser` |
+
+启动后默认会自动用系统默认浏览器打开本机访问地址，加 `--no-browser` 可关闭。
 
 所有参数都会自动保存到配置文件，之后直接运行即可按上次配置启动。也可以直接编辑该文件。
 
