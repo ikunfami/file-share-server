@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文件分享</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+  }
+  .card {
+    background: #fff; border-radius: 12px; padding: 40px 36px;
+    width: 90%; max-width: 380px; box-shadow: 0 12px 40px rgba(0,0,0,.25);
+    text-align: center;
+  }
+  h1 { font-size: 20px; margin-bottom: 10px; color: #333; }
+  p.sub { font-size: 14px; color: #888; margin-bottom: 24px; line-height: 1.7; }
+  input[type=password] {
+    width: 100%; padding: 12px 14px; font-size: 15px;
+    border: 1px solid #ddd; border-radius: 8px; outline: none;
+  }
+  input[type=password]:focus { border-color: #667eea; }
+  button {
+    width: 100%; margin-top: 16px; padding: 12px; font-size: 15px;
+    color: #fff; background: #667eea; border: none; border-radius: 8px;
+    cursor: pointer;
+  }
+  button:hover { background: #5a6fd6; }
+  .error { color: #e74c3c; font-size: 13px; margin-top: 14px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    {% if mode == "missing" %}
+    <h1>😢 文件不存在</h1>
+    <p class="sub">该文件不存在，或已被分享者移除<br>请联系分享者确认链接是否有效</p>
+    {% elif mode == "disabled" %}
+    <h1>🚫 分享已失效</h1>
+    <p class="sub">分享功能已被管理员关闭<br>请联系分享者重新开启或获取新的分享方式</p>
+    {% else %}
+    <h1>🔐 访问分享</h1>
+    <p class="sub">此分享受密码保护<br>请输入访问密码继续</p>
+    <form method="get" action="{{ path }}">
+      <input type="password" name="pwd" placeholder="访问密码" autofocus required>
+      <button type="submit">查看 / 下载</button>
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    </form>
+    {% endif %}
+  </div>
+</body>
+</html>

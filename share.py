@@ -21,7 +21,7 @@ from flask import (
     Flask,
     abort,
     redirect,
-    render_template_string,
+    render_template,
     request,
     send_file,
     session,
@@ -52,6 +52,7 @@ DEFAULT_CONFIG = {
     "visitor_password": "",
     "admin_password": "",
     "share_enabled": True,
+    "zip_enabled": True,
 }
 
 USAGE_TEXT = """局域网文件共享工具 - 使用说明
@@ -140,6 +141,7 @@ def save_config(cfg):
         f"visitor_password = {json.dumps(cfg['visitor_password'])}",
         f"admin_password = {json.dumps(cfg['admin_password'])}",
         f"share_enabled = {'true' if cfg['share_enabled'] else 'false'}",
+        f"zip_enabled = {'true' if cfg['zip_enabled'] else 'false'}",
         "",
     ]
     CONFIG_PATH.write_text("\n".join(lines), encoding="utf-8")
@@ -178,554 +180,22 @@ def safe_join(root, rel):
 
 # ---------------------------------------------------------------- 页面
 
-LOGIN_PAGE = """<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>登录 - 文件共享</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: "Microsoft YaHei", system-ui, sans-serif;
-    min-height: 100vh;
-    display: flex; align-items: center; justify-content: center;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-  }
-  .card {
-    background: #fff; border-radius: 12px; padding: 40px 36px;
-    width: 90%; max-width: 360px; box-shadow: 0 12px 40px rgba(0,0,0,.25);
-  }
-  h1 { font-size: 20px; margin-bottom: 8px; color: #333; text-align: center; }
-  p.sub { font-size: 13px; color: #888; margin-bottom: 24px; text-align: center; }
-  img.login-icon { display: block; width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 12px; object-fit: cover; }
-  input[type=password] {
-    width: 100%; padding: 12px 14px; font-size: 15px;
-    border: 1px solid #ddd; border-radius: 8px; outline: none;
-  }
-  input[type=password]:focus { border-color: #667eea; }
-  button {
-    width: 100%; margin-top: 16px; padding: 12px; font-size: 15px;
-    color: #fff; background: #667eea; border: none; border-radius: 8px;
-    cursor: pointer;
-  }
-  button:hover { background: #5a6fd6; }
-  .error { color: #e74c3c; font-size: 13px; margin-top: 12px; text-align: center; }
-  a.back {
-    display: block; margin-top: 16px; text-align: center;
-    font-size: 13px; color: #999; text-decoration: none;
-  }
-  a.back:hover { color: #667eea; }
-  .login-meta { text-align: center; font-size: 12px; color: #bbb; margin-top: 22px; }
-  .login-meta a { color: inherit; text-decoration: none; }
-  .login-meta a:hover { color: #667eea; text-decoration: underline; }
-</style>
-</head>
-<body>
-  <form class="card" method="post">
-    <img class="login-icon" src="/assets/icon-login.jpeg" alt="">
-    <h1>文件共享</h1>
-    <p class="sub">{% if visitor_off %}请输入管理员密码进入设置（不登录也可直接浏览文件）{% else %}此共享已开启密码保护，请输入访问密码{% endif %}</p>
-    <input type="password" name="password" placeholder="{% if visitor_off %}管理员密码{% else %}访问密码{% endif %}" autofocus required>
-    <button type="submit">进入</button>
-    {% if error %}<div class="error">{{ error }}</div>{% endif %}
-    {% if visitor_off %}<a class="back" href="{{ url_for('index') }}">← 返回文件列表</a>{% endif %}
-    <div class="login-meta"><a href="https://github.com/ikunfami/file-share-server" target="_blank">file-share-server</a> v{{ version }} · by <a href="https://github.com/ikunfami" target="_blank">ikunfami</a></div>
-  </form>
-</body>
-</html>
-"""
 
-LIST_PAGE = """<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>文件共享</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: "Microsoft YaHei", system-ui, sans-serif;
-    background: #f4f6fa; color: #333;
-  }
-  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
-  header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 16px;
-  }
-  h1 { font-size: 20px; }
-  .toplinks a { font-size: 13px; color: #999; text-decoration: none; margin-left: 14px; }
-  .toplinks a:hover { color: #667eea; }
-  .toplinks a.settings { color: #667eea; }
-  .breadcrumb {
-    font-size: 14px; color: #666; margin-bottom: 14px;
-    background: #fff; padding: 10px 14px; border-radius: 8px;
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  }
-  .breadcrumb a { color: #667eea; text-decoration: none; }
-  .breadcrumb a:hover { text-decoration: underline; }
-  .breadcrumb .crumbs { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .breadcrumb a.refresh {
-    color: #999; text-decoration: none; font-size: 16px;
-    line-height: 1; flex-shrink: 0; padding: 2px 4px;
-    display: inline-block;
-  }
-  .breadcrumb a.refresh:hover { color: #667eea; }
-  .breadcrumb a.refresh.spinning { color: #667eea; animation: spin .6s linear infinite; }
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-  table {
-    width: 100%; border-collapse: collapse; background: #fff;
-    border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.05);
-  }
-  th, td { padding: 12px 14px; text-align: left; font-size: 14px; }
-  th { background: #fafbfc; color: #888; font-weight: normal; font-size: 13px; }
-  tr:not(:last-child) td { border-bottom: 1px solid #f0f0f0; }
-  td.name a { color: #333; text-decoration: none; }
-  td.name a:hover { color: #667eea; }
-  td.name a.preview { cursor: zoom-in; }
-  td.size, td.mtime { color: #999; white-space: nowrap; }
-  td.download { text-align: right; white-space: nowrap; }
-  td.download a {
-    color: #667eea; text-decoration: none; font-size: 13px;
-    border: 1px solid #667eea; border-radius: 6px; padding: 4px 10px;
-  }
-  td.download a:hover { background: #667eea; color: #fff; }
-  td.download a + a { margin-left: 8px; }
-  .empty { text-align: center; color: #aaa; padding: 40px 0; }
-  img.icon { width: 18px; height: 18px; vertical-align: -3px; margin-right: 8px; border-radius: 2px; }
-  .lightbox {
-    display: none; position: fixed; inset: 0; z-index: 100;
-    background: rgba(0,0,0,.85);
-    align-items: center; justify-content: center; flex-direction: column;
-    cursor: zoom-out;
-  }
-  .lightbox img {
-    max-width: 92%; max-height: 84vh; border-radius: 4px;
-    box-shadow: 0 4px 24px rgba(0,0,0,.4); cursor: default;
-  }
-  .lightbox .lb-caption {
-    color: #ddd; font-size: 13px; margin-top: 12px;
-    max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .lightbox .lb-close {
-    position: absolute; top: 16px; right: 24px;
-    color: #fff; font-size: 32px; line-height: 1; cursor: pointer;
-  }
-  .toast-box {
-    position: fixed; top: 16px; right: 16px; z-index: 300;
-    display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
-  }
-  .toast {
-    background: #fff; border-radius: 8px; padding: 12px 16px;
-    box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 14px; color: #333;
-    border-left: 4px solid #667eea; max-width: 320px;
-    animation: toastIn .3s ease;
-  }
-  .toast.success { border-left-color: #27ae60; }
-  .toast.error { border-left-color: #e74c3c; }
-  .toast.out { animation: toastOut .3s ease forwards; }
-  .toast .t-title { font-size: 14px; color: #333; }
-  .toast .t-time { font-size: 12px; color: #999; margin-top: 4px; }
-  @keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: none; opacity: 1; } }
-  @keyframes toastOut { to { transform: translateX(120%); opacity: 0; } }
-  .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
-  .footer a { color: inherit; text-decoration: none; }
-  .footer a:hover { color: #667eea; text-decoration: underline; }
-  @media (max-width: 600px) {
-    th.mtime, td.mtime { display: none; }
-  }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1>📂 文件共享</h1>
-    <div class="toplinks">
-      {% if is_admin %}
-      <a class="settings" href="{{ url_for('settings') }}">⚙️ 设置</a>
-      <a href="{{ url_for('logout') }}">退出登录</a>
-      {% elif not password_on %}
-      <a class="settings" href="{{ url_for('login', next=request.path) }}">管理员登录</a>
-      {% else %}
-      <a href="{{ url_for('logout') }}">退出登录</a>
-      {% endif %}
-    </div>
-  </header>
-  <div class="breadcrumb">
-    <span class="crumbs">当前位置：{{ breadcrumb | safe }}</span>
-    <a class="refresh" href="{{ refresh_url }}" title="刷新" onclick="return spinRefresh(this)">⟳</a>
-  </div>
-  {% if items %}
-  <table>
-    <tr><th>名称</th><th>大小</th><th class="mtime">修改时间</th><th></th></tr>
-    {% for it in items %}
-    <tr>
-      <td class="name">
-        {% if it.is_dir %}
-        <a href="{{ it.url }}"><img class="icon" src="/assets/icon-folder.jpeg" alt="">{{ it.name }}</a>
-        {% elif it.is_image %}
-        <a href="javascript:;" class="preview" onclick='showPreview({{ (it.download_url + "?inline=1")|tojson }}, {{ it.name|tojson }})'><img class="icon" src="/assets/icon-image.jpeg" alt="">{{ it.name }}</a>
-        {% else %}
-        <img class="icon" src="/assets/icon-file.jpeg" alt="">{{ it.name }}
-        {% endif %}
-      </td>
-      <td class="size">{{ it.size }}</td>
-      <td class="mtime">{{ it.mtime }}</td>
-      <td class="download">
-        {% if not it.is_dir %}
-        {% if share_on %}<a href="javascript:;" onclick="shareLink('{{ it.share_url }}')">分享</a>{% endif %}
-        <a href="{{ it.download_url }}" onclick='toast("已开始下载：" + {{ it.name|tojson }}, "success")'>下载</a>
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% else %}
-  <div class="empty">此文件夹为空</div>
-  {% endif %}
-  <div class="footer"><a href="https://github.com/ikunfami/file-share-server" target="_blank">file-share-server</a> v{{ version }} · by <a href="https://github.com/ikunfami" target="_blank">ikunfami</a></div>
-</div>
-<div id="lightbox" class="lightbox" onclick="closePreview()">
-  <span class="lb-close">&times;</span>
-  <img id="lb-img" alt="" onclick="event.stopPropagation()">
-  <div id="lb-caption" class="lb-caption" onclick="event.stopPropagation()"></div>
-</div>
-<div id="toast-box" class="toast-box"></div>
-<div id="toast-init" data-notice='{{ notice|tojson }}' style="display:none"></div>
-<script>
-function copyText(text) {
-  if (navigator.clipboard && window.isSecureContext) {
-    return navigator.clipboard.writeText(text);
-  }
-  return new Promise(function(resolve, reject) {
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy') ? resolve() : reject(); }
-    catch (e) { reject(e); }
-    document.body.removeChild(ta);
-  });
-}
-function toast(msg, type) {
-  var box = document.getElementById('toast-box');
-  if (!box) return;
-  var pad = function(n) { return (n < 10 ? '0' : '') + n; };
-  var now = new Date();
-  var time = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
-    + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-  var el = document.createElement('div');
-  el.className = 'toast' + (type ? ' ' + type : '');
-  el.innerHTML = '<div class="t-title"></div><div class="t-time"></div>';
-  el.querySelector('.t-title').textContent = msg;
-  el.querySelector('.t-time').textContent = time;
-  box.appendChild(el);
-  setTimeout(function() {
-    el.classList.add('out');
-    setTimeout(function() { el.parentNode && el.parentNode.removeChild(el); }, 300);
-  }, 2600);
-}
-function shareLink(url) {
-  copyText(url).then(
-    function() { toast('分享链接已复制到剪贴板', 'success'); },
-    function() { prompt('自动复制失败，请手动复制：', url); }
-  );
-}
-function spinRefresh(el) {
-  if (el.classList.contains('spinning')) return false;
-  el.classList.add('spinning');
-  toast('正在刷新…');
-  setTimeout(function() { location.href = el.getAttribute('href'); }, 450);
-  return false;
-}
-function showPreview(url, name) {
-  document.getElementById('lb-img').src = url;
-  document.getElementById('lb-caption').textContent = name || '';
-  document.getElementById('lightbox').style.display = 'flex';
-}
-function closePreview() {
-  var lb = document.getElementById('lightbox');
-  lb.style.display = 'none';
-  document.getElementById('lb-img').src = '';
-}
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closePreview();
-});
-(function() {
-  var init = document.getElementById('toast-init');
-  if (!init || !init.dataset.notice) return;
-  var notice = null;
-  try { notice = JSON.parse(init.dataset.notice); } catch (e) {}
-  if (notice) toast(notice, 'success');
-})();
-</script>
-</body>
-</html>
-"""
 
-SETTINGS_PAGE = """<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>设置 - 文件共享</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: "Microsoft YaHei", system-ui, sans-serif;
-    background: #f4f6fa; color: #333;
-  }
-  .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px; }
-  header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 16px;
-  }
-  h1 { font-size: 20px; }
-  header a { font-size: 13px; color: #999; text-decoration: none; }
-  header a:hover { color: #667eea; }
-  .card {
-    background: #fff; border-radius: 10px; padding: 28px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.06);
-  }
-  .field { margin-bottom: 20px; }
-  label.title { display: block; font-size: 14px; color: #333; margin-bottom: 8px; font-weight: bold; }
-  label.hint { display: block; font-size: 12px; color: #999; margin-top: 6px; }
-  input[type=text], input[type=password] {
-    width: 100%; padding: 10px 12px; font-size: 14px;
-    border: 1px solid #ddd; border-radius: 8px; outline: none;
-  }
-  input:focus { border-color: #667eea; }
-  .dirrow { display: flex; gap: 8px; }
-  .dirrow input { flex: 1; }
-  .dirrow input:disabled { background: #f5f5f5; color: #999; }
-  .check { display: flex; align-items: center; font-size: 14px; }
-  .check input { margin-right: 8px; }
-  button {
-    width: 100%; padding: 12px; font-size: 15px;
-    color: #fff; background: #667eea; border: none; border-radius: 8px;
-    cursor: pointer;
-  }
-  button:hover { background: #5a6fd6; }
-  button.pickbtn {
-    width: 100px; margin: 0; padding: 0; white-space: nowrap; flex-shrink: 0;
-    color: #667eea; background: #fff; border: 1px solid #667eea;
-    font-size: 14px; line-height: 38px; text-align: center;
-  }
-  button.pickbtn:hover { color: #fff; background: #667eea; }
-  button.pickbtn:disabled { opacity: .55; cursor: default; }
-  .msg-ok { color: #27ae60; font-size: 13px; margin-bottom: 16px; }
-  .msg-err { color: #e74c3c; font-size: 13px; margin-bottom: 16px; }
-  .toast-box {
-    position: fixed; top: 16px; right: 16px; z-index: 300;
-    display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
-  }
-  .toast {
-    background: #fff; border-radius: 8px; padding: 12px 16px;
-    box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 14px; color: #333;
-    border-left: 4px solid #667eea; max-width: 320px;
-    animation: toastIn .3s ease;
-  }
-  .toast.success { border-left-color: #27ae60; }
-  .toast.error { border-left-color: #e74c3c; }
-  .toast.out { animation: toastOut .3s ease forwards; }
-  .toast .t-title { font-size: 14px; color: #333; }
-  .toast .t-time { font-size: 12px; color: #999; margin-top: 4px; }
-  @keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: none; opacity: 1; } }
-  @keyframes toastOut { to { transform: translateX(120%); opacity: 0; } }
-  .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
-  .footer a { color: inherit; text-decoration: none; }
-  .footer a:hover { color: #667eea; text-decoration: underline; }
-  hr { border: none; border-top: 1px solid #f0f0f0; margin: 24px 0; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1>⚙️ 设置</h1>
-    <a href="{{ url_for('index') }}">← 返回文件列表</a>
-  </header>
-  <form class="card" method="post">
-    <div id="toast-init" data-toasts='{{ toasts|tojson }}' style="display:none"></div>
 
-    <div class="field">
-      <label class="title">分享目录</label>
-      <div class="dirrow">
-        <input type="text" id="share_dir" name="share_dir" value="{{ share_dir }}" required>
-        <button type="button" class="pickbtn" onclick="pickDir()">选择目录</button>
-      </div>
-      <label class="hint">本机文件夹的完整路径，保存后立即生效；也可点击「选择」从本机挑选文件夹</label>
-    </div>
 
-    <hr>
-
-    <div class="field">
-      <label class="title">访问密码（普通用户）</label>
-      <label class="check">
-        <input type="checkbox" name="visitor_enabled" {% if visitor_enabled %}checked{% endif %}>
-        启用访问密码
-      </label>
-      <div style="height:10px"></div>
-      <input type="password" name="visitor_password" placeholder="新访问密码（留空则不修改）">
-      <label class="hint">启用后，普通用户必须输入访问密码才能查看和下载</label>
-    </div>
-
-    <hr>
-
-    <div class="field">
-      <label class="title">分享功能</label>
-      <label class="check">
-        <input type="checkbox" name="share_enabled" {% if share_enabled %}checked{% endif %}>
-        启用分享功能
-      </label>
-      <label class="hint">关闭后列表页不再显示「分享」按钮，已发出的分享链接也会失效</label>
-    </div>
-
-    <hr>
-
-    <div class="field">
-      <label class="title">管理员密码</label>
-      <input type="password" name="admin_password" placeholder="新管理员密码（留空则不修改）">
-      <label class="hint">管理员可进入此设置页面</label>
-    </div>
-
-    <button type="submit">保存设置</button>
-  </form>
-  <div class="footer"><a href="https://github.com/ikunfami/file-share-server" target="_blank">file-share-server</a> v{{ version }} · by <a href="https://github.com/ikunfami" target="_blank">ikunfami</a></div>
-</div>
-<div id="toast-box" class="toast-box"></div>
-<script>
-function toast(msg, type) {
-  var box = document.getElementById('toast-box');
-  if (!box) return;
-  var pad = function(n) { return (n < 10 ? '0' : '') + n; };
-  var now = new Date();
-  var time = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
-    + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-  var el = document.createElement('div');
-  el.className = 'toast' + (type ? ' ' + type : '');
-  el.innerHTML = '<div class="t-title"></div><div class="t-time"></div>';
-  el.querySelector('.t-title').textContent = msg;
-  el.querySelector('.t-time').textContent = time;
-  box.appendChild(el);
-  setTimeout(function() {
-    el.classList.add('out');
-    setTimeout(function() { el.parentNode && el.parentNode.removeChild(el); }, 300);
-  }, 2600);
-}
-(function() {
-  var init = document.getElementById('toast-init');
-  if (!init || !init.dataset.toasts) return;
-  var list;
-  try { list = JSON.parse(init.dataset.toasts); } catch (e) { return; }
-  list.forEach(function(t, i) {
-    setTimeout(function() { toast(t[0], t[1]); }, i * 150);
-  });
-})();
-async function pickDir() {
-  var btn = document.querySelector('.pickbtn');
-  var input = document.getElementById('share_dir');
-  btn.disabled = true;
-  btn.textContent = '选择中';
-  input.disabled = true;
-  try {
-    var resp = await fetch("{{ url_for('pick_dir') }}", {method: 'POST'});
-    var data = await resp.json();
-    if (data.ok && data.path) {
-      input.value = data.path;
-    } else if (data.error) {
-      alert(data.error);
-    }
-  } catch (e) {
-    alert('打开选择窗口失败，请手动输入路径');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '选择目录';
-    input.disabled = false;
-  }
-}
-</script>
-</body>
-</html>
-"""
-
-ERROR_PAGE = """<!DOCTYPE html>
-<html lang="zh-CN">
-<head><meta charset="utf-8"><title>出错</title></head>
-<body style="font-family:sans-serif;text-align:center;padding-top:80px;">
-  <h1>{{ code }}</h1>
-  <p>{{ message }}</p>
-  <p><a href="{{ url_for('index') }}">返回文件列表</a></p>
-</body>
-</html>
-"""
-
-SHARE_PAGE = """<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>文件分享</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: "Microsoft YaHei", system-ui, sans-serif;
-    min-height: 100vh;
-    display: flex; align-items: center; justify-content: center;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-  }
-  .card {
-    background: #fff; border-radius: 12px; padding: 40px 36px;
-    width: 90%; max-width: 380px; box-shadow: 0 12px 40px rgba(0,0,0,.25);
-    text-align: center;
-  }
-  h1 { font-size: 20px; margin-bottom: 10px; color: #333; }
-  p.sub { font-size: 14px; color: #888; margin-bottom: 24px; line-height: 1.7; }
-  input[type=password] {
-    width: 100%; padding: 12px 14px; font-size: 15px;
-    border: 1px solid #ddd; border-radius: 8px; outline: none;
-  }
-  input[type=password]:focus { border-color: #667eea; }
-  button {
-    width: 100%; margin-top: 16px; padding: 12px; font-size: 15px;
-    color: #fff; background: #667eea; border: none; border-radius: 8px;
-    cursor: pointer;
-  }
-  button:hover { background: #5a6fd6; }
-  .error { color: #e74c3c; font-size: 13px; margin-top: 14px; }
-</style>
-</head>
-<body>
-  <div class="card">
-    {% if mode == "missing" %}
-    <h1>😢 文件不存在</h1>
-    <p class="sub">该文件不存在，或已被分享者移除<br>请联系分享者确认链接是否有效</p>
-    {% elif mode == "disabled" %}
-    <h1>🚫 分享已失效</h1>
-    <p class="sub">分享功能已被管理员关闭<br>请联系分享者重新开启或获取新的分享方式</p>
-    {% else %}
-    <h1>🔐 访问分享</h1>
-    <p class="sub">此分享受密码保护<br>请输入访问密码继续</p>
-    <form method="get" action="{{ path }}">
-      <input type="password" name="pwd" placeholder="访问密码" autofocus required>
-      <button type="submit">查看 / 下载</button>
-      {% if error %}<div class="error">{{ error }}</div>{% endif %}
-    </form>
-    {% endif %}
-  </div>
-</body>
-</html>
-"""
 
 # ---------------------------------------------------------------- 应用
 
 
 def create_app(cfg):
-    # 图标等静态资源：脚本模式读项目 assets/，exe 模式读 PyInstaller 打包的临时目录
-    asset_dir = Path(getattr(sys, "_MEIPASS", BASE_DIR)) / "assets"
+    # 静态资源与模板：脚本模式读项目目录，exe 模式读 PyInstaller 打包的临时目录
+    resource_dir = Path(getattr(sys, "_MEIPASS", BASE_DIR))
     app = Flask(
-        __name__, static_folder=str(asset_dir), static_url_path="/assets"
+        __name__,
+        static_folder=str(resource_dir / "assets"),
+        static_url_path="/assets",
+        template_folder=str(resource_dir / "templates"),
     )
     app.secret_key = secrets.token_hex(32)
 
@@ -802,8 +272,8 @@ def create_app(cfg):
                     target = url_for("index")
                 return redirect(target)
             error = "密码错误，请重试"
-        return render_template_string(
-            LOGIN_PAGE,
+        return render_template(
+            "login.html",
             error=error,
             visitor_off=not visitor_protection_on(),
             version=VERSION,
@@ -844,6 +314,7 @@ def create_app(cfg):
             old_dir = cfg["share_dir"]
             old_ve = cfg["visitor_enabled"]
             old_se = cfg["share_enabled"]
+            old_ze = cfg["zip_enabled"]
             d = form.get("share_dir", "").strip().strip('"')
             if d:
                 p = Path(d).expanduser().resolve()
@@ -864,6 +335,7 @@ def create_app(cfg):
                     if ap:
                         cfg["admin_password"] = ap
                     cfg["share_enabled"] = form.get("share_enabled") == "on"
+                    cfg["zip_enabled"] = form.get("zip_enabled") == "on"
                     save_config(cfg)
                     # 密码变更后轮换会话密钥，使其他已登录会话（含分享链接带入的）立即失效；
                     # 同时刷新当前管理员的会话，避免其本人被登出
@@ -889,16 +361,24 @@ def create_app(cfg):
                                 "success",
                             )
                         )
+                    if cfg["zip_enabled"] != old_ze:
+                        toasts.append(
+                            (
+                                "打包下载已" + ("开启" if cfg["zip_enabled"] else "关闭"),
+                                "success",
+                            )
+                        )
                     if ap:
                         toasts.append(("管理员密码已更新", "success"))
                     if not toasts:
                         toasts.append(("设置已保存", "success"))
-        return render_template_string(
-            SETTINGS_PAGE,
+        return render_template(
+            "settings.html",
             toasts=toasts,
             share_dir=cfg["share_dir"],
             visitor_enabled=cfg["visitor_enabled"],
             share_enabled=cfg["share_enabled"],
+            zip_enabled=cfg["zip_enabled"],
             version=VERSION,
         )
 
@@ -929,6 +409,7 @@ def create_app(cfg):
             items.append(
                 {
                     "name": p.name,
+                    "rel": sub_rel,
                     "is_dir": p.is_dir(),
                     "is_image": p.is_file() and p.suffix.lower() in IMAGE_EXTS,
                     "size": "" if p.is_dir() else human_size(st.st_size),
@@ -951,8 +432,8 @@ def create_app(cfg):
                 )
             )
 
-        return render_template_string(
-            LIST_PAGE,
+        return render_template(
+            "list.html",
             items=items,
             breadcrumb="".join(crumbs),
             refresh_url=request.path,
@@ -960,6 +441,7 @@ def create_app(cfg):
             is_admin=session.get("role") == "admin",
             password_on=visitor_protection_on() or session.get("role") is not None,
             share_on=cfg["share_enabled"],
+            zip_on=cfg["zip_enabled"],
             version=VERSION,
         )
 
@@ -968,8 +450,8 @@ def create_app(cfg):
         """分享链接：校验开关、路径与密码，通过后文件直接下载、文件夹跳转到浏览页。"""
         if not cfg["share_enabled"]:
             return (
-                render_template_string(
-                    SHARE_PAGE, mode="disabled", error=None, path=None
+                render_template(
+                    "share.html", mode="disabled", error=None, path=None
                 ),
                 410,
             )
@@ -977,7 +459,7 @@ def create_app(cfg):
         target = safe_join(root, rel)
         if target is None or not target.exists():
             return (
-                render_template_string(SHARE_PAGE, mode="missing", error=None, path=None),
+                render_template("share.html", mode="missing", error=None, path=None),
                 404,
             )
         if visitor_protection_on():
@@ -987,8 +469,8 @@ def create_app(cfg):
                 r = check_role(pwd)
                 if not r:
                     return (
-                        render_template_string(
-                            SHARE_PAGE,
+                        render_template(
+                            "share.html",
                             mode="password",
                             error="密码错误，请重试",
                             path=request.path,
@@ -998,8 +480,8 @@ def create_app(cfg):
                 session["role"] = r
             elif session.get("role") not in ("admin", "visitor"):
                 return (
-                    render_template_string(
-                        SHARE_PAGE, mode="password", error=None, path=request.path
+                    render_template(
+                        "share.html", mode="password", error=None, path=request.path
                     ),
                     401,
                 )
@@ -1017,13 +499,46 @@ def create_app(cfg):
             return send_file(target)
         return send_file(target, as_attachment=True)
 
+    @app.route("/download-zip", methods=["POST"])
+    def download_zip():
+        """把勾选的文件/文件夹打包成 zip 下载，文件夹递归包含。"""
+        import io
+        import zipfile
+
+        if not cfg["zip_enabled"]:
+            abort(403)
+        root = Path(cfg["share_dir"]).resolve()
+        rels = request.form.getlist("path")
+        if not rels:
+            abort(400)
+        buf = io.BytesIO()
+        count = 0
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for rel in rels:
+                target = safe_join(root, rel)
+                if target is None or not target.exists():
+                    continue
+                if target.is_dir():
+                    for f in sorted(target.rglob("*")):
+                        if f.is_file():
+                            zf.write(f, str(Path(target.name) / f.relative_to(target)))
+                            count += 1
+                else:
+                    zf.write(target, target.name)
+                    count += 1
+        if count == 0:
+            abort(404)
+        buf.seek(0)
+        name = "打包下载-" + time.strftime("%Y%m%d-%H%M%S") + ".zip"
+        return send_file(buf, as_attachment=True, download_name=name)
+
     @app.errorhandler(404)
     def not_found(e):
-        return render_template_string(ERROR_PAGE, code=404, message="文件或目录不存在"), 404
+        return render_template("error.html", code=404, message="文件或目录不存在"), 404
 
     @app.errorhandler(403)
     def forbidden(e):
-        return render_template_string(ERROR_PAGE, code=403, message="没有权限访问"), 403
+        return render_template("error.html", code=403, message="没有权限访问"), 403
 
     return app
 

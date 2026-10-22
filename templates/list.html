@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文件共享</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", system-ui, sans-serif;
+    background: #f4f6fa; color: #333;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 20px; }
+  .toplinks a { font-size: 13px; color: #999; text-decoration: none; margin-left: 14px; }
+  .toplinks a:hover { color: #667eea; }
+  .toplinks a.settings { color: #667eea; }
+  .topbar {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; padding: 8px 14px; border-radius: 8px;
+    margin-bottom: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    font-size: 14px; color: #666;
+  }
+  .topbar .crumbs { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .topbar a { color: #667eea; text-decoration: none; }
+  .topbar a:hover { text-decoration: underline; }
+  .topbar input[type=text] {
+    width: 180px; height: 32px; padding: 0 10px; font-size: 13px; flex-shrink: 0;
+    border: 1px solid #ddd; border-radius: 6px; outline: none;
+  }
+  .topbar input[type=text]:focus { border-color: #667eea; }
+  .zipbtn.spinning { color: #667eea; animation: spin .6s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  table {
+    width: 100%; border-collapse: collapse; background: #fff;
+    border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.05);
+  }
+  th, td { padding: 12px 14px; text-align: left; font-size: 14px; }
+  th { background: #fafbfc; color: #888; font-weight: normal; font-size: 13px; }
+  tr:not(:last-child) td { border-bottom: 1px solid #f0f0f0; }
+  td.name a { color: #333; text-decoration: none; }
+  td.name a:hover { color: #667eea; }
+  td.name a.preview { cursor: zoom-in; }
+  td.size, td.mtime { color: #999; white-space: nowrap; }
+  td.download { text-align: right; white-space: nowrap; }
+  td.download a {
+    color: #667eea; text-decoration: none; font-size: 13px;
+    border: 1px solid #667eea; border-radius: 6px; padding: 4px 10px;
+  }
+  td.download a:hover { background: #667eea; color: #fff; }
+  td.download a + a { margin-left: 8px; }
+  .empty { text-align: center; color: #aaa; padding: 40px 0; }
+  img.icon { width: 18px; height: 18px; vertical-align: -3px; margin-right: 8px; border-radius: 2px; }
+  button.zipbtn {
+    margin: 0; padding: 0 14px; height: 32px; width: auto; font-size: 13px;
+    color: #667eea; background: #fff; border: 1px solid #667eea; border-radius: 6px;
+    cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  }
+  button.zipbtn:hover:not(:disabled) { background: #667eea; color: #fff; }
+  button.zipbtn:disabled { opacity: .5; cursor: default; }
+  th.check, td.check { width: 36px; padding-right: 0; }
+  td.check input { cursor: pointer; }
+  .lightbox {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,.85);
+    align-items: center; justify-content: center; flex-direction: column;
+    cursor: zoom-out;
+  }
+  .lightbox img {
+    max-width: 92%; max-height: 84vh; border-radius: 4px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.4); cursor: default;
+  }
+  .lightbox .lb-caption {
+    color: #ddd; font-size: 13px; margin-top: 12px;
+    max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lightbox .lb-close {
+    position: absolute; top: 16px; right: 24px;
+    color: #fff; font-size: 32px; line-height: 1; cursor: pointer;
+  }
+  .toast-box {
+    position: fixed; top: 16px; right: 16px; z-index: 300;
+    display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+  }
+  .toast {
+    width: 280px; box-sizing: border-box;
+    background: #fff; border-radius: 8px; padding: 12px 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 14px; color: #333;
+    border-left: 4px solid #667eea;
+    animation: toastIn .3s ease;
+  }
+  .toast.success { border-left-color: #27ae60; }
+  .toast.error { border-left-color: #e74c3c; }
+  .toast.out { animation: toastOut .3s ease forwards; }
+  .toast .t-title { font-size: 14px; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toast .t-time { font-size: 12px; color: #999; margin-top: 4px; }
+  @keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes toastOut { to { transform: translateX(120%); opacity: 0; } }
+  .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
+  .footer a { color: inherit; text-decoration: none; }
+  .footer a:hover { color: #667eea; text-decoration: underline; }
+  @media (max-width: 600px) {
+    th.mtime, td.mtime { display: none; }
+    .topbar { flex-wrap: wrap; }
+    .topbar .crumbs { flex-basis: 100%; }
+    .topbar input[type=text] { flex: 1; width: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📂 文件共享</h1>
+    <div class="toplinks">
+      {% if is_admin %}
+      <a class="settings" href="{{ url_for('settings') }}">⚙️ 设置</a>
+      <a href="{{ url_for('logout') }}">退出登录</a>
+      {% elif not password_on %}
+      <a class="settings" href="{{ url_for('login', next=request.path) }}">管理员登录</a>
+      {% else %}
+      <a href="{{ url_for('logout') }}">退出登录</a>
+      {% endif %}
+    </div>
+  </header>
+  <div class="topbar">
+    <span class="crumbs">当前位置：{{ breadcrumb | safe }}</span>
+    {% if items %}
+    <input type="text" id="filter" placeholder="过滤文件名…" oninput="filterRows(this.value)">
+    {% if zip_on %}
+    <button type="button" class="zipbtn" id="zipbtn" onclick="downloadZip()" disabled>打包下载</button>
+    {% endif %}
+    {% endif %}
+    <button type="button" class="zipbtn" onclick="return spinRefresh(this, {{ refresh_url|tojson }})">刷新</button>
+  </div>
+  {% if items %}
+  <table>
+    <tr>{% if zip_on %}<th class="check"><input type="checkbox" id="check-all" onclick="toggleAll(this)"></th>{% endif %}<th>名称</th><th>大小</th><th class="mtime">修改时间</th><th></th></tr>
+    {% for it in items %}
+    <tr class="data-row" data-name="{{ it.name }}">
+      {% if zip_on %}<td class="check"><input type="checkbox" class="row-check" value="{{ it.rel }}" onchange="updateZipBtn()"></td>{% endif %}
+      <td class="name">
+        {% if it.is_dir %}
+        <a href="{{ it.url }}"><img class="icon" src="/assets/icon-folder.jpeg" alt="">{{ it.name }}</a>
+        {% elif it.is_image %}
+        <a href="javascript:;" class="preview" onclick='showPreview({{ (it.download_url + "?inline=1")|tojson }}, {{ it.name|tojson }})'><img class="icon" src="/assets/icon-image.jpeg" alt="">{{ it.name }}</a>
+        {% else %}
+        <img class="icon" src="/assets/icon-file.jpeg" alt="">{{ it.name }}
+        {% endif %}
+      </td>
+      <td class="size">{{ it.size }}</td>
+      <td class="mtime">{{ it.mtime }}</td>
+      <td class="download">
+        {% if not it.is_dir %}
+        {% if share_on %}<a href="javascript:;" onclick="shareLink('{{ it.share_url }}')">分享</a>{% endif %}
+        <a href="{{ it.download_url }}" onclick='toast("已开始下载：" + {{ it.name|tojson }}, "success")'>下载</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    <tr id="empty-filter" style="display:none"><td colspan="{% if zip_on %}5{% else %}4{% endif %}" class="empty">没有匹配的文件</td></tr>
+  </table>
+  {% else %}
+  <div class="empty">此文件夹为空</div>
+  {% endif %}
+  <div class="footer"><a href="https://github.com/ikunfami/file-share-server" target="_blank">file-share-server</a> v{{ version }} · by <a href="https://github.com/ikunfami" target="_blank">ikunfami</a></div>
+</div>
+<div id="lightbox" class="lightbox" onclick="closePreview()">
+  <span class="lb-close">&times;</span>
+  <img id="lb-img" alt="" onclick="event.stopPropagation()">
+  <div id="lb-caption" class="lb-caption" onclick="event.stopPropagation()"></div>
+</div>
+<div id="toast-box" class="toast-box"></div>
+<div id="toast-init" data-notice='{{ notice|tojson }}' style="display:none"></div>
+<script>
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise(function(resolve, reject) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy') ? resolve() : reject(); }
+    catch (e) { reject(e); }
+    document.body.removeChild(ta);
+  });
+}
+function toast(msg, type) {
+  var box = document.getElementById('toast-box');
+  if (!box) return;
+  var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+  var now = new Date();
+  var time = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+    + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  var el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.innerHTML = '<div class="t-title"></div><div class="t-time"></div>';
+  el.querySelector('.t-title').textContent = msg;
+  el.querySelector('.t-time').textContent = time;
+  box.appendChild(el);
+  setTimeout(function() {
+    el.classList.add('out');
+    setTimeout(function() { el.parentNode && el.parentNode.removeChild(el); }, 300);
+  }, 2600);
+}
+function shareLink(url) {
+  copyText(url).then(
+    function() { toast('分享链接已复制到剪贴板', 'success'); },
+    function() { prompt('自动复制失败，请手动复制：', url); }
+  );
+}
+function toggleAll(box) {
+  document.querySelectorAll('.row-check').forEach(function(b) { b.checked = box.checked; });
+  updateZipBtn();
+}
+function updateZipBtn() {
+  var n = document.querySelectorAll('.row-check:checked').length;
+  var btn = document.getElementById('zipbtn');
+  if (!btn) return;
+  btn.disabled = !n;
+  btn.textContent = n ? '打包下载 (' + n + ')' : '打包下载';
+}
+function downloadZip() {
+  var fd = new FormData();
+  document.querySelectorAll('.row-check:checked').forEach(function(b) { fd.append('path', b.value); });
+  if (!fd.has('path')) { toast('请先勾选要下载的文件', 'error'); return; }
+  toast('正在打包…');
+  fetch({{ url_for('download_zip')|tojson }}, { method: 'POST', body: fd }).then(function(r) {
+    if (!r.ok) { toast('打包失败（HTTP ' + r.status + '）', 'error'); return; }
+    var cd = r.headers.get('Content-Disposition') || '';
+    var m = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+    var fname = m ? decodeURIComponent(m[1]) : 'download.zip';
+    return r.blob().then(function(blob) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
+      toast('打包完成，开始下载', 'success');
+    });
+  }).catch(function() { toast('打包请求失败', 'error'); });
+}
+function filterRows(kw) {
+  kw = kw.trim().toLowerCase();
+  var any = false;
+  document.querySelectorAll('tr.data-row').forEach(function(tr) {
+    var show = !kw || (tr.getAttribute('data-name') || '').toLowerCase().indexOf(kw) >= 0;
+    tr.style.display = show ? '' : 'none';
+    if (show) any = true;
+  });
+  var ef = document.getElementById('empty-filter');
+  if (ef) ef.style.display = (kw && !any) ? '' : 'none';
+}
+function spinRefresh(el, url) {
+  if (el.classList.contains('spinning')) return false;
+  el.classList.add('spinning');
+  toast('正在刷新…');
+  setTimeout(function() { location.href = url; }, 450);
+  return false;
+}
+function showPreview(url, name) {
+  document.getElementById('lb-img').src = url;
+  document.getElementById('lb-caption').textContent = name || '';
+  document.getElementById('lightbox').style.display = 'flex';
+}
+function closePreview() {
+  var lb = document.getElementById('lightbox');
+  lb.style.display = 'none';
+  document.getElementById('lb-img').src = '';
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closePreview();
+});
+(function() {
+  var init = document.getElementById('toast-init');
+  if (!init || !init.dataset.notice) return;
+  var notice = null;
+  try { notice = JSON.parse(init.dataset.notice); } catch (e) {}
+  if (notice) toast(notice, 'success');
+})();
+</script>
+</body>
+</html>

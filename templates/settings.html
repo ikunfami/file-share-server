@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>设置 - 文件共享</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", system-ui, sans-serif;
+    background: #f4f6fa; color: #333;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 20px; }
+  header a { font-size: 13px; color: #999; text-decoration: none; }
+  header a:hover { color: #667eea; }
+  .card {
+    background: #fff; border-radius: 10px; padding: 28px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  }
+  .field { margin-bottom: 20px; }
+  label.title { display: block; font-size: 14px; color: #333; margin-bottom: 8px; font-weight: bold; }
+  label.hint { display: block; font-size: 12px; color: #999; margin-top: 6px; }
+  input[type=text], input[type=password] {
+    width: 100%; padding: 10px 12px; font-size: 14px;
+    border: 1px solid #ddd; border-radius: 8px; outline: none;
+  }
+  input:focus { border-color: #667eea; }
+  .dirrow { display: flex; gap: 8px; }
+  .dirrow input { flex: 1; }
+  .dirrow input:disabled { background: #f5f5f5; color: #999; }
+  .check { display: flex; align-items: center; font-size: 14px; }
+  .check input { margin-right: 8px; }
+  button {
+    width: 100%; padding: 12px; font-size: 15px;
+    color: #fff; background: #667eea; border: none; border-radius: 8px;
+    cursor: pointer;
+  }
+  button:hover { background: #5a6fd6; }
+  button.pickbtn {
+    width: 100px; margin: 0; padding: 0; white-space: nowrap; flex-shrink: 0;
+    color: #667eea; background: #fff; border: 1px solid #667eea;
+    font-size: 14px; line-height: 38px; text-align: center;
+  }
+  button.pickbtn:hover { color: #fff; background: #667eea; }
+  button.pickbtn:disabled { opacity: .55; cursor: default; }
+  .msg-ok { color: #27ae60; font-size: 13px; margin-bottom: 16px; }
+  .msg-err { color: #e74c3c; font-size: 13px; margin-bottom: 16px; }
+  .toast-box {
+    position: fixed; top: 16px; right: 16px; z-index: 300;
+    display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+  }
+  .toast {
+    width: 280px; box-sizing: border-box;
+    background: #fff; border-radius: 8px; padding: 12px 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 14px; color: #333;
+    border-left: 4px solid #667eea;
+    animation: toastIn .3s ease;
+  }
+  .toast.success { border-left-color: #27ae60; }
+  .toast.error { border-left-color: #e74c3c; }
+  .toast.out { animation: toastOut .3s ease forwards; }
+  .toast .t-title { font-size: 14px; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toast .t-time { font-size: 12px; color: #999; margin-top: 4px; }
+  @keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes toastOut { to { transform: translateX(120%); opacity: 0; } }
+  .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
+  .footer a { color: inherit; text-decoration: none; }
+  .footer a:hover { color: #667eea; text-decoration: underline; }
+  hr { border: none; border-top: 1px solid #f0f0f0; margin: 24px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>⚙️ 设置</h1>
+    <a href="{{ url_for('index') }}">← 返回文件列表</a>
+  </header>
+  <form class="card" method="post">
+    <div id="toast-init" data-toasts='{{ toasts|tojson }}' style="display:none"></div>
+
+    <div class="field">
+      <label class="title">分享目录</label>
+      <div class="dirrow">
+        <input type="text" id="share_dir" name="share_dir" value="{{ share_dir }}" required>
+        <button type="button" class="pickbtn" onclick="pickDir()">选择目录</button>
+      </div>
+      <label class="hint">本机文件夹的完整路径，保存后立即生效；也可点击「选择」从本机挑选文件夹</label>
+    </div>
+
+    <hr>
+
+    <div class="field">
+      <label class="title">访问密码（普通用户）</label>
+      <label class="check">
+        <input type="checkbox" name="visitor_enabled" {% if visitor_enabled %}checked{% endif %}>
+        启用访问密码
+      </label>
+      <div style="height:10px"></div>
+      <input type="password" name="visitor_password" placeholder="新访问密码（留空则不修改）">
+      <label class="hint">启用后，普通用户必须输入访问密码才能查看和下载</label>
+    </div>
+
+    <hr>
+
+    <div class="field">
+      <label class="title">分享功能</label>
+      <label class="check">
+        <input type="checkbox" name="share_enabled" {% if share_enabled %}checked{% endif %}>
+        启用分享功能
+      </label>
+      <label class="hint">关闭后列表页不再显示「分享」按钮，已发出的分享链接也会失效</label>
+    </div>
+
+    <hr>
+
+    <div class="field">
+      <label class="title">打包下载</label>
+      <label class="check">
+        <input type="checkbox" name="zip_enabled" {% if zip_enabled %}checked{% endif %}>
+        启用打包下载
+      </label>
+      <label class="hint">关闭后文件列表不再显示复选框和「打包下载」按钮</label>
+    </div>
+
+    <hr>
+
+    <div class="field">
+      <label class="title">管理员密码</label>
+      <input type="password" name="admin_password" placeholder="新管理员密码（留空则不修改）">
+      <label class="hint">管理员可进入此设置页面</label>
+    </div>
+
+    <button type="submit">保存设置</button>
+  </form>
+  <div class="footer"><a href="https://github.com/ikunfami/file-share-server" target="_blank">file-share-server</a> v{{ version }} · by <a href="https://github.com/ikunfami" target="_blank">ikunfami</a></div>
+</div>
+<div id="toast-box" class="toast-box"></div>
+<script>
+function toast(msg, type) {
+  var box = document.getElementById('toast-box');
+  if (!box) return;
+  var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+  var now = new Date();
+  var time = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+    + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  var el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.innerHTML = '<div class="t-title"></div><div class="t-time"></div>';
+  el.querySelector('.t-title').textContent = msg;
+  el.querySelector('.t-time').textContent = time;
+  box.appendChild(el);
+  setTimeout(function() {
+    el.classList.add('out');
+    setTimeout(function() { el.parentNode && el.parentNode.removeChild(el); }, 300);
+  }, 2600);
+}
+(function() {
+  var init = document.getElementById('toast-init');
+  if (!init || !init.dataset.toasts) return;
+  var list;
+  try { list = JSON.parse(init.dataset.toasts); } catch (e) { return; }
+  list.forEach(function(t, i) {
+    setTimeout(function() { toast(t[0], t[1]); }, i * 150);
+  });
+})();
+async function pickDir() {
+  var btn = document.querySelector('.pickbtn');
+  var input = document.getElementById('share_dir');
+  btn.disabled = true;
+  btn.textContent = '选择中';
+  input.disabled = true;
+  try {
+    var resp = await fetch("{{ url_for('pick_dir') }}", {method: 'POST'});
+    var data = await resp.json();
+    if (data.ok && data.path) {
+      input.value = data.path;
+    } else if (data.error) {
+      alert(data.error);
+    }
+  } catch (e) {
+    alert('打开选择窗口失败，请手动输入路径');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '选择目录';
+    input.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
