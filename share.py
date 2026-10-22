@@ -40,7 +40,10 @@ else:
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 
 # 当前版本号（发布新版本时同步修改，并打同名 git tag）
-VERSION = "1.0.4"
+VERSION = "1.0.5"
+
+# 支持点击文件名直接预览的图片扩展名
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".ico"}
 
 DEFAULT_CONFIG = {
     "share_dir": str(BASE_DIR),
@@ -207,15 +210,21 @@ LOGIN_PAGE = """<!DOCTYPE html>
   }
   button:hover { background: #5a6fd6; }
   .error { color: #e74c3c; font-size: 13px; margin-top: 12px; text-align: center; }
+  a.back {
+    display: block; margin-top: 16px; text-align: center;
+    font-size: 13px; color: #999; text-decoration: none;
+  }
+  a.back:hover { color: #667eea; }
 </style>
 </head>
 <body>
   <form class="card" method="post">
     <h1>文件共享</h1>
-    <p class="sub">此共享已开启密码保护，请输入访问密码</p>
-    <input type="password" name="password" placeholder="访问密码" autofocus required>
+    <p class="sub">{% if visitor_off %}请输入管理员密码进入设置（不登录也可直接浏览文件）{% else %}此共享已开启密码保护，请输入访问密码{% endif %}</p>
+    <input type="password" name="password" placeholder="{% if visitor_off %}管理员密码{% else %}访问密码{% endif %}" autofocus required>
     <button type="submit">进入</button>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    {% if visitor_off %}<a class="back" href="{{ url_for('index') }}">← 返回文件列表</a>{% endif %}
   </form>
 </body>
 </html>
@@ -245,8 +254,19 @@ LIST_PAGE = """<!DOCTYPE html>
   .breadcrumb {
     font-size: 14px; color: #666; margin-bottom: 14px;
     background: #fff; padding: 10px 14px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
   }
   .breadcrumb a { color: #667eea; text-decoration: none; }
+  .breadcrumb a:hover { text-decoration: underline; }
+  .breadcrumb .crumbs { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .breadcrumb a.refresh {
+    color: #999; text-decoration: none; font-size: 16px;
+    line-height: 1; flex-shrink: 0; padding: 2px 4px;
+    display: inline-block;
+  }
+  .breadcrumb a.refresh:hover { color: #667eea; }
+  .breadcrumb a.refresh.spinning { color: #667eea; animation: spin .6s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   table {
     width: 100%; border-collapse: collapse; background: #fff;
     border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.05);
@@ -256,6 +276,7 @@ LIST_PAGE = """<!DOCTYPE html>
   tr:not(:last-child) td { border-bottom: 1px solid #f0f0f0; }
   td.name a { color: #333; text-decoration: none; }
   td.name a:hover { color: #667eea; }
+  td.name a.preview { cursor: zoom-in; }
   td.size, td.mtime { color: #999; white-space: nowrap; }
   td.download { text-align: right; white-space: nowrap; }
   td.download a {
@@ -266,6 +287,24 @@ LIST_PAGE = """<!DOCTYPE html>
   td.download a + a { margin-left: 8px; }
   .empty { text-align: center; color: #aaa; padding: 40px 0; }
   .icon { margin-right: 8px; }
+  .lightbox {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,.85);
+    align-items: center; justify-content: center; flex-direction: column;
+    cursor: zoom-out;
+  }
+  .lightbox img {
+    max-width: 92%; max-height: 84vh; border-radius: 4px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.4); cursor: default;
+  }
+  .lightbox .lb-caption {
+    color: #ddd; font-size: 13px; margin-top: 12px;
+    max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lightbox .lb-close {
+    position: absolute; top: 16px; right: 24px;
+    color: #fff; font-size: 32px; line-height: 1; cursor: pointer;
+  }
   .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
   @media (max-width: 600px) {
     th.mtime, td.mtime { display: none; }
@@ -287,7 +326,10 @@ LIST_PAGE = """<!DOCTYPE html>
       {% endif %}
     </div>
   </header>
-  <div class="breadcrumb">当前位置：{{ breadcrumb | safe }}</div>
+  <div class="breadcrumb">
+    <span class="crumbs">当前位置：{{ breadcrumb | safe }}</span>
+    <a class="refresh" href="{{ refresh_url }}" title="刷新" onclick="return spinRefresh(this)">⟳</a>
+  </div>
   {% if items %}
   <table>
     <tr><th>名称</th><th>大小</th><th class="mtime">修改时间</th><th></th></tr>
@@ -296,6 +338,8 @@ LIST_PAGE = """<!DOCTYPE html>
       <td class="name">
         {% if it.is_dir %}
         <a href="{{ it.url }}"><span class="icon">📁</span>{{ it.name }}</a>
+        {% elif it.is_image %}
+        <a href="javascript:;" class="preview" onclick='showPreview({{ (it.download_url + "?inline=1")|tojson }}, {{ it.name|tojson }})'><span class="icon">🖼️</span>{{ it.name }}</a>
         {% else %}
         <span class="icon">📄</span>{{ it.name }}
         {% endif %}
@@ -315,6 +359,11 @@ LIST_PAGE = """<!DOCTYPE html>
   <div class="empty">此文件夹为空</div>
   {% endif %}
   <div class="footer">file-share-server v{{ version }} · by ikunfami</div>
+</div>
+<div id="lightbox" class="lightbox" onclick="closePreview()">
+  <span class="lb-close">&times;</span>
+  <img id="lb-img" alt="" onclick="event.stopPropagation()">
+  <div id="lb-caption" class="lb-caption" onclick="event.stopPropagation()"></div>
 </div>
 <script>
 function copyText(text) {
@@ -339,6 +388,25 @@ function shareLink(url) {
     function() { prompt('自动复制失败，请手动复制：', url); }
   );
 }
+function spinRefresh(el) {
+  if (el.classList.contains('spinning')) return false;
+  el.classList.add('spinning');
+  setTimeout(function() { location.href = el.getAttribute('href'); }, 450);
+  return false;
+}
+function showPreview(url, name) {
+  document.getElementById('lb-img').src = url;
+  document.getElementById('lb-caption').textContent = name || '';
+  document.getElementById('lightbox').style.display = 'flex';
+}
+function closePreview() {
+  var lb = document.getElementById('lightbox');
+  lb.style.display = 'none';
+  document.getElementById('lb-img').src = '';
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closePreview();
+});
 </script>
 </body>
 </html>
@@ -629,7 +697,9 @@ def create_app(cfg):
                     target = url_for("index")
                 return redirect(target)
             error = "密码错误，请重试"
-        return render_template_string(LOGIN_PAGE, error=error)
+        return render_template_string(
+            LOGIN_PAGE, error=error, visitor_off=not visitor_protection_on()
+        )
 
     @app.route("/logout")
     def logout():
@@ -728,6 +798,7 @@ def create_app(cfg):
                 {
                     "name": p.name,
                     "is_dir": p.is_dir(),
+                    "is_image": p.is_file() and p.suffix.lower() in IMAGE_EXTS,
                     "size": "" if p.is_dir() else human_size(st.st_size),
                     "mtime": time_str(st.st_mtime),
                     "url": url_for("index", rel=sub_rel),
@@ -752,6 +823,7 @@ def create_app(cfg):
             LIST_PAGE,
             items=items,
             breadcrumb="".join(crumbs),
+            refresh_url=request.path,
             is_admin=session.get("role") == "admin",
             password_on=visitor_protection_on() or session.get("role") is not None,
             share_on=cfg["share_enabled"],
@@ -808,6 +880,8 @@ def create_app(cfg):
         target = safe_join(root, rel)
         if target is None or not target.is_file():
             abort(404)
+        if request.args.get("inline") == "1":
+            return send_file(target)
         return send_file(target, as_attachment=True)
 
     @app.errorhandler(404)
