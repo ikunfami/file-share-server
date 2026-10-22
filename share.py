@@ -196,8 +196,9 @@ LOGIN_PAGE = """<!DOCTYPE html>
     background: #fff; border-radius: 12px; padding: 40px 36px;
     width: 90%; max-width: 360px; box-shadow: 0 12px 40px rgba(0,0,0,.25);
   }
-  h1 { font-size: 20px; margin-bottom: 8px; color: #333; }
-  p.sub { font-size: 13px; color: #888; margin-bottom: 24px; }
+  h1 { font-size: 20px; margin-bottom: 8px; color: #333; text-align: center; }
+  p.sub { font-size: 13px; color: #888; margin-bottom: 24px; text-align: center; }
+  img.login-icon { display: block; width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 12px; object-fit: cover; }
   input[type=password] {
     width: 100%; padding: 12px 14px; font-size: 15px;
     border: 1px solid #ddd; border-radius: 8px; outline: none;
@@ -215,16 +216,21 @@ LOGIN_PAGE = """<!DOCTYPE html>
     font-size: 13px; color: #999; text-decoration: none;
   }
   a.back:hover { color: #667eea; }
+  .login-meta { text-align: center; font-size: 12px; color: #bbb; margin-top: 22px; }
+  .login-meta a { color: inherit; text-decoration: none; }
+  .login-meta a:hover { color: #667eea; text-decoration: underline; }
 </style>
 </head>
 <body>
   <form class="card" method="post">
+    <img class="login-icon" src="/assets/icon-login.jpeg" alt="">
     <h1>文件共享</h1>
     <p class="sub">{% if visitor_off %}请输入管理员密码进入设置（不登录也可直接浏览文件）{% else %}此共享已开启密码保护，请输入访问密码{% endif %}</p>
     <input type="password" name="password" placeholder="{% if visitor_off %}管理员密码{% else %}访问密码{% endif %}" autofocus required>
     <button type="submit">进入</button>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     {% if visitor_off %}<a class="back" href="{{ url_for('index') }}">← 返回文件列表</a>{% endif %}
+    <div class="login-meta"><a href="https://github.com/ikunfami/file-share-server" target="_blank">file-share-server</a> v{{ version }} · by <a href="https://github.com/ikunfami" target="_blank">ikunfami</a></div>
   </form>
 </body>
 </html>
@@ -286,7 +292,7 @@ LIST_PAGE = """<!DOCTYPE html>
   td.download a:hover { background: #667eea; color: #fff; }
   td.download a + a { margin-left: 8px; }
   .empty { text-align: center; color: #aaa; padding: 40px 0; }
-  .icon { margin-right: 8px; }
+  img.icon { width: 18px; height: 18px; vertical-align: -3px; margin-right: 8px; border-radius: 2px; }
   .lightbox {
     display: none; position: fixed; inset: 0; z-index: 100;
     background: rgba(0,0,0,.85);
@@ -305,7 +311,26 @@ LIST_PAGE = """<!DOCTYPE html>
     position: absolute; top: 16px; right: 24px;
     color: #fff; font-size: 32px; line-height: 1; cursor: pointer;
   }
+  .toast-box {
+    position: fixed; top: 16px; right: 16px; z-index: 300;
+    display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+  }
+  .toast {
+    background: #fff; border-radius: 8px; padding: 12px 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 14px; color: #333;
+    border-left: 4px solid #667eea; max-width: 320px;
+    animation: toastIn .3s ease;
+  }
+  .toast.success { border-left-color: #27ae60; }
+  .toast.error { border-left-color: #e74c3c; }
+  .toast.out { animation: toastOut .3s ease forwards; }
+  .toast .t-title { font-size: 14px; color: #333; }
+  .toast .t-time { font-size: 12px; color: #999; margin-top: 4px; }
+  @keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes toastOut { to { transform: translateX(120%); opacity: 0; } }
   .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
+  .footer a { color: inherit; text-decoration: none; }
+  .footer a:hover { color: #667eea; text-decoration: underline; }
   @media (max-width: 600px) {
     th.mtime, td.mtime { display: none; }
   }
@@ -337,11 +362,11 @@ LIST_PAGE = """<!DOCTYPE html>
     <tr>
       <td class="name">
         {% if it.is_dir %}
-        <a href="{{ it.url }}"><span class="icon">📁</span>{{ it.name }}</a>
+        <a href="{{ it.url }}"><img class="icon" src="/assets/icon-folder.jpeg" alt="">{{ it.name }}</a>
         {% elif it.is_image %}
-        <a href="javascript:;" class="preview" onclick='showPreview({{ (it.download_url + "?inline=1")|tojson }}, {{ it.name|tojson }})'><span class="icon">🖼️</span>{{ it.name }}</a>
+        <a href="javascript:;" class="preview" onclick='showPreview({{ (it.download_url + "?inline=1")|tojson }}, {{ it.name|tojson }})'><img class="icon" src="/assets/icon-image.jpeg" alt="">{{ it.name }}</a>
         {% else %}
-        <span class="icon">📄</span>{{ it.name }}
+        <img class="icon" src="/assets/icon-file.jpeg" alt="">{{ it.name }}
         {% endif %}
       </td>
       <td class="size">{{ it.size }}</td>
@@ -349,7 +374,7 @@ LIST_PAGE = """<!DOCTYPE html>
       <td class="download">
         {% if not it.is_dir %}
         {% if share_on %}<a href="javascript:;" onclick="shareLink('{{ it.share_url }}')">分享</a>{% endif %}
-        <a href="{{ it.download_url }}">下载</a>
+        <a href="{{ it.download_url }}" onclick='toast("已开始下载：" + {{ it.name|tojson }}, "success")'>下载</a>
         {% endif %}
       </td>
     </tr>
@@ -358,13 +383,15 @@ LIST_PAGE = """<!DOCTYPE html>
   {% else %}
   <div class="empty">此文件夹为空</div>
   {% endif %}
-  <div class="footer">file-share-server v{{ version }} · by ikunfami</div>
+  <div class="footer"><a href="https://github.com/ikunfami/file-share-server" target="_blank">file-share-server</a> v{{ version }} · by <a href="https://github.com/ikunfami" target="_blank">ikunfami</a></div>
 </div>
 <div id="lightbox" class="lightbox" onclick="closePreview()">
   <span class="lb-close">&times;</span>
   <img id="lb-img" alt="" onclick="event.stopPropagation()">
   <div id="lb-caption" class="lb-caption" onclick="event.stopPropagation()"></div>
 </div>
+<div id="toast-box" class="toast-box"></div>
+<div id="toast-init" data-notice='{{ notice|tojson }}' style="display:none"></div>
 <script>
 function copyText(text) {
   if (navigator.clipboard && window.isSecureContext) {
@@ -382,15 +409,34 @@ function copyText(text) {
     document.body.removeChild(ta);
   });
 }
+function toast(msg, type) {
+  var box = document.getElementById('toast-box');
+  if (!box) return;
+  var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+  var now = new Date();
+  var time = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+    + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  var el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.innerHTML = '<div class="t-title"></div><div class="t-time"></div>';
+  el.querySelector('.t-title').textContent = msg;
+  el.querySelector('.t-time').textContent = time;
+  box.appendChild(el);
+  setTimeout(function() {
+    el.classList.add('out');
+    setTimeout(function() { el.parentNode && el.parentNode.removeChild(el); }, 300);
+  }, 2600);
+}
 function shareLink(url) {
   copyText(url).then(
-    function() { alert('分享链接已复制到剪贴板：\\n\\n' + url); },
+    function() { toast('分享链接已复制到剪贴板', 'success'); },
     function() { prompt('自动复制失败，请手动复制：', url); }
   );
 }
 function spinRefresh(el) {
   if (el.classList.contains('spinning')) return false;
   el.classList.add('spinning');
+  toast('正在刷新…');
   setTimeout(function() { location.href = el.getAttribute('href'); }, 450);
   return false;
 }
@@ -407,6 +453,13 @@ function closePreview() {
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closePreview();
 });
+(function() {
+  var init = document.getElementById('toast-init');
+  if (!init || !init.dataset.notice) return;
+  var notice = null;
+  try { notice = JSON.parse(init.dataset.notice); } catch (e) {}
+  if (notice) toast(notice, 'success');
+})();
 </script>
 </body>
 </html>
@@ -464,7 +517,26 @@ SETTINGS_PAGE = """<!DOCTYPE html>
   button.pickbtn:disabled { opacity: .55; cursor: default; }
   .msg-ok { color: #27ae60; font-size: 13px; margin-bottom: 16px; }
   .msg-err { color: #e74c3c; font-size: 13px; margin-bottom: 16px; }
+  .toast-box {
+    position: fixed; top: 16px; right: 16px; z-index: 300;
+    display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+  }
+  .toast {
+    background: #fff; border-radius: 8px; padding: 12px 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 14px; color: #333;
+    border-left: 4px solid #667eea; max-width: 320px;
+    animation: toastIn .3s ease;
+  }
+  .toast.success { border-left-color: #27ae60; }
+  .toast.error { border-left-color: #e74c3c; }
+  .toast.out { animation: toastOut .3s ease forwards; }
+  .toast .t-title { font-size: 14px; color: #333; }
+  .toast .t-time { font-size: 12px; color: #999; margin-top: 4px; }
+  @keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes toastOut { to { transform: translateX(120%); opacity: 0; } }
   .footer { text-align: center; color: #bbb; font-size: 12px; margin-top: 24px; }
+  .footer a { color: inherit; text-decoration: none; }
+  .footer a:hover { color: #667eea; text-decoration: underline; }
   hr { border: none; border-top: 1px solid #f0f0f0; margin: 24px 0; }
 </style>
 </head>
@@ -475,7 +547,7 @@ SETTINGS_PAGE = """<!DOCTYPE html>
     <a href="{{ url_for('index') }}">← 返回文件列表</a>
   </header>
   <form class="card" method="post">
-    {% if msg %}<div class="msg-{{ 'ok' if ok else 'err' }}">{{ msg }}</div>{% endif %}
+    <div id="toast-init" data-toasts='{{ toasts|tojson }}' style="display:none"></div>
 
     <div class="field">
       <label class="title">分享目录</label>
@@ -520,9 +592,37 @@ SETTINGS_PAGE = """<!DOCTYPE html>
 
     <button type="submit">保存设置</button>
   </form>
-  <div class="footer">file-share-server v{{ version }} · by ikunfami</div>
+  <div class="footer"><a href="https://github.com/ikunfami/file-share-server" target="_blank">file-share-server</a> v{{ version }} · by <a href="https://github.com/ikunfami" target="_blank">ikunfami</a></div>
 </div>
+<div id="toast-box" class="toast-box"></div>
 <script>
+function toast(msg, type) {
+  var box = document.getElementById('toast-box');
+  if (!box) return;
+  var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+  var now = new Date();
+  var time = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+    + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  var el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.innerHTML = '<div class="t-title"></div><div class="t-time"></div>';
+  el.querySelector('.t-title').textContent = msg;
+  el.querySelector('.t-time').textContent = time;
+  box.appendChild(el);
+  setTimeout(function() {
+    el.classList.add('out');
+    setTimeout(function() { el.parentNode && el.parentNode.removeChild(el); }, 300);
+  }, 2600);
+}
+(function() {
+  var init = document.getElementById('toast-init');
+  if (!init || !init.dataset.toasts) return;
+  var list;
+  try { list = JSON.parse(init.dataset.toasts); } catch (e) { return; }
+  list.forEach(function(t, i) {
+    setTimeout(function() { toast(t[0], t[1]); }, i * 150);
+  });
+})();
 async function pickDir() {
   var btn = document.querySelector('.pickbtn');
   var input = document.getElementById('share_dir');
@@ -622,7 +722,11 @@ SHARE_PAGE = """<!DOCTYPE html>
 
 
 def create_app(cfg):
-    app = Flask(__name__)
+    # 图标等静态资源：脚本模式读项目 assets/，exe 模式读 PyInstaller 打包的临时目录
+    asset_dir = Path(getattr(sys, "_MEIPASS", BASE_DIR)) / "assets"
+    app = Flask(
+        __name__, static_folder=str(asset_dir), static_url_path="/assets"
+    )
     app.secret_key = secrets.token_hex(32)
 
     def visitor_protection_on():
@@ -692,13 +796,17 @@ def create_app(cfg):
             role = check_role(request.form.get("password", ""))
             if role:
                 session["role"] = role
+                session["notice"] = "管理员登录成功" if role == "admin" else "用户登录成功"
                 target = request.args.get("next") or url_for("index")
                 if not target.startswith("/"):
                     target = url_for("index")
                 return redirect(target)
             error = "密码错误，请重试"
         return render_template_string(
-            LOGIN_PAGE, error=error, visitor_off=not visitor_protection_on()
+            LOGIN_PAGE,
+            error=error,
+            visitor_off=not visitor_protection_on(),
+            version=VERSION,
         )
 
     @app.route("/logout")
@@ -730,21 +838,24 @@ def create_app(cfg):
     def settings():
         if session.get("role") != "admin":
             abort(403)
-        msg, ok = None, True
+        toasts = []
         if request.method == "POST":
             form = request.form
+            old_dir = cfg["share_dir"]
+            old_ve = cfg["visitor_enabled"]
+            old_se = cfg["share_enabled"]
             d = form.get("share_dir", "").strip().strip('"')
             if d:
                 p = Path(d).expanduser().resolve()
                 if not p.is_dir():
-                    msg, ok = f"分享目录不存在：{p}", False
+                    toasts.append((f"分享目录不存在：{p}", "error"))
                 else:
                     cfg["share_dir"] = str(p)
-            if ok:
+            if not toasts:
                 vp = form.get("visitor_password", "")
                 ve = form.get("visitor_enabled") == "on"
                 if ve and not vp and not cfg["visitor_password"]:
-                    msg, ok = "启用访问密码前，请先设置一个访问密码", False
+                    toasts.append(("启用访问密码前，请先设置一个访问密码", "error"))
                 else:
                     cfg["visitor_enabled"] = ve
                     if vp:
@@ -759,11 +870,32 @@ def create_app(cfg):
                     if vp or ap:
                         app.secret_key = secrets.token_hex(32)
                         session["role"] = "admin"
-                    msg, ok = "设置已保存", True
+                    # 按变更项生成对应的通知弹窗
+                    if cfg["share_dir"] != old_dir:
+                        toasts.append(("分享目录已更新", "success"))
+                    if cfg["visitor_enabled"] != old_ve:
+                        toasts.append(
+                            (
+                                "访问密码已" + ("启用" if cfg["visitor_enabled"] else "关闭"),
+                                "success",
+                            )
+                        )
+                    if vp:
+                        toasts.append(("访问密码已更新", "success"))
+                    if cfg["share_enabled"] != old_se:
+                        toasts.append(
+                            (
+                                "分享功能已" + ("开启" if cfg["share_enabled"] else "关闭"),
+                                "success",
+                            )
+                        )
+                    if ap:
+                        toasts.append(("管理员密码已更新", "success"))
+                    if not toasts:
+                        toasts.append(("设置已保存", "success"))
         return render_template_string(
             SETTINGS_PAGE,
-            msg=msg,
-            ok=ok,
+            toasts=toasts,
             share_dir=cfg["share_dir"],
             visitor_enabled=cfg["visitor_enabled"],
             share_enabled=cfg["share_enabled"],
@@ -824,6 +956,7 @@ def create_app(cfg):
             items=items,
             breadcrumb="".join(crumbs),
             refresh_url=request.path,
+            notice=session.pop("notice", None),
             is_admin=session.get("role") == "admin",
             password_on=visitor_protection_on() or session.get("role") is not None,
             share_on=cfg["share_enabled"],
