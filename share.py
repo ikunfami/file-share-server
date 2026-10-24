@@ -40,7 +40,7 @@ else:
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 
 # 当前版本号（发布新版本时同步修改，并打同名 git tag）
-VERSION = "1.0.6"
+VERSION = "1.2.0"
 
 # 支持点击文件名直接预览的图片扩展名
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".ico"}
@@ -223,6 +223,13 @@ def create_app(cfg):
         return None
 
     seen_ips = set()
+
+    @app.after_request
+    def no_cache_html(resp):
+        """HTML 页面不缓存，避免服务端更新后浏览器展示旧页面（静态资源仍缓存）。"""
+        if resp.content_type.startswith("text/html"):
+            resp.headers["Cache-Control"] = "no-store"
+        return resp
 
     @app.before_request
     def log_visit():
@@ -523,6 +530,45 @@ def create_app(cfg):
             return {"ok": False, "error": "没有可保存的文件"}, 400
         return {"ok": True, "saved": saved}
 
+    @app.route("/mkdir", methods=["POST"])
+    def mkdir():
+        """管理员在当前浏览的目录下新建文件夹。"""
+        if session.get("role") != "admin":
+            abort(403)
+        root = Path(cfg["share_dir"]).resolve()
+        rel = request.form.get("rel", "")
+        folder = safe_join(root, rel) if rel else root
+        name = request.form.get("name", "").strip()
+        if folder is None or not folder.is_dir():
+            abort(404)
+        if not valid_name(name):
+            return {"ok": False, "error": "名称不合法（不能包含 \\ / : * ? \" < > | 字符）"}, 400
+        try:
+            (folder / name).mkdir()
+        except FileExistsError:
+            return {"ok": False, "error": "已存在同名文件或文件夹"}, 400
+        except OSError as e:
+            return {"ok": False, "error": f"创建失败：{e}"}, 500
+        return {"ok": True, "name": name}
+
+    @app.route("/qr")
+    def qr_image():
+        """把传入的文本（分享链接）生成二维码图片（SVG），供手机扫码。"""
+        data = request.args.get("d", "")
+        if not data or len(data) > 500:
+            abort(400)
+        try:
+            import io
+
+            import qrcode
+            import qrcode.image.svg
+        except ImportError:
+            abort(503)
+        img = qrcode.make(data, image_factory=qrcode.image.svg.SvgPathImage, border=2)
+        buf = io.BytesIO()
+        img.save(buf)
+        return app.response_class(buf.getvalue(), mimetype="image/svg+xml")
+
     @app.route("/download-zip", methods=["POST"])
     def download_zip():
         """把勾选的文件/文件夹打包成 zip 下载，文件夹递归包含。"""
@@ -578,6 +624,66 @@ def unique_path(folder, name):
         if not candidate.exists():
             return candidate
     return folder / f"{stem}-{secrets.token_hex(4)}{suffix}"
+
+
+def valid_name(name):
+    """校验新建/重命名的名称：非空、无路径分隔符和 Windows 非法字符。"""
+    if not name or len(name) > 255:
+        return False
+    if name in (".", ".."):
+        return False
+    return not any(c in name for c in '\\/:*?"<>|')
+
+
+def print_qr(url):
+    """在控制台打印访问二维码，手机扫码即可打开（缺 qrcode 库时静默跳过）。
+
+    用 ▀/▄ 半块字符 + ANSI 颜色渲染：两个模块合并为一行，宽高接近 1:1，
+    且强制白底黑码（标准二维码配色），不受终端深浅主题影响。
+    """
+    try:
+        import qrcode
+    except ImportError:
+        return
+    if not sys.stdout.isatty():
+        # 输出被重定向（日志文件等）时切换为 UTF-8，避免 ▀/▄ 字符按 GBK 编码失败
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            pass
+    if sys.platform == "win32":
+        # 启用控制台 ANSI 颜色支持（Windows 10+）
+        import ctypes
+
+        handle = ctypes.windll.kernel32.GetStdHandle(-11)
+        mode = ctypes.c_ulong()
+        if ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            ctypes.windll.kernel32.SetConsoleMode(handle, mode.value | 0x0004)
+    qr = qrcode.QRCode(border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    m = qr.get_matrix()
+    # ANSI 颜色：前景黑 / 背景白
+    FG_DARK, BG_LIGHT, BG_DARK, RESET = "\033[30m", "\033[47m", "\033[40m", "\033[0m"
+    print("  手机扫码访问：")
+    try:
+        for y in range(0, len(m), 2):
+            parts = []
+            for x in range(len(m[0])):
+                top = m[y][x]
+                bottom = m[y + 1][x] if y + 1 < len(m) else False
+                if top and bottom:
+                    parts.append(FG_DARK + BG_DARK + "▀")
+                elif top:
+                    parts.append(FG_DARK + BG_LIGHT + "▀")
+                elif bottom:
+                    parts.append(FG_DARK + BG_LIGHT + "▄")
+                else:
+                    parts.append(BG_LIGHT + " ")
+            print("  " + "".join(parts) + RESET)
+    except UnicodeEncodeError:
+        # 极端编码环境下放弃二维码，不影响服务启动
+        pass
 
 
 def human_size(n):
@@ -676,6 +782,7 @@ def main():
     ip = lan_ip()
     if ip != "127.0.0.1":
         print(f"  局域网访问：http://{ip}:{port}")
+        print_qr(f"http://{ip}:{port}/")
     print(f"  访问密码：{'已开启' if cfg['visitor_enabled'] else '未开启'}")
     print(f"  管理员密码：{'已设置' if cfg['admin_password'] else '未设置'}")
     print(f"  分享功能：{'已开启' if cfg['share_enabled'] else '已关闭'}")

@@ -83,6 +83,23 @@
     position: absolute; top: 16px; right: 24px;
     color: #fff; font-size: 32px; line-height: 1; cursor: pointer;
   }
+  .share-modal {
+    display: none; position: fixed; inset: 0; z-index: 400;
+    background: rgba(0,0,0,.5);
+    align-items: center; justify-content: center;
+  }
+  .share-modal .sm-box {
+    background: #fff; border-radius: 12px; padding: 20px;
+    text-align: center; max-width: 86vw; box-sizing: border-box;
+  }
+  .share-modal .sm-title { font-size: 15px; color: #333; margin-bottom: 12px; }
+  .share-modal img { display: block; width: min(64vw, 260px); height: auto; margin: 0 auto; }
+  .share-modal .sm-url {
+    font-size: 14px; color: #333; margin: 10px 0 14px;
+    max-width: 72vw; overflow: hidden;
+    white-space: nowrap; text-overflow: ellipsis;
+  }
+  .share-modal .sm-close { margin: 0 auto; }
   .toast-box {
     position: fixed; top: 16px; right: 16px; z-index: 300;
     display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
@@ -105,10 +122,37 @@
   .footer a { color: inherit; text-decoration: none; }
   .footer a:hover { color: #667eea; text-decoration: underline; }
   @media (max-width: 600px) {
+    .wrap { padding: 14px 10px; }
+    h1 { font-size: 18px; }
+    .toplinks a { margin-left: 10px; }
     th.mtime, td.mtime { display: none; }
     .topbar { flex-wrap: wrap; }
     .topbar .crumbs { flex-basis: 100%; }
-    .topbar input[type=text] { flex: 1; width: auto; }
+    .topbar input[type=text] { flex: 0 0 100%; width: auto; }
+    /* 表格改为卡片式列表，避免超出屏幕宽度 */
+    table, tbody { display: block; background: transparent; box-shadow: none; border-radius: 0; overflow: hidden; }
+    table tr:first-child { display: none; }
+    tr.data-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-areas: "check name size" ". actions actions";
+      align-items: center;
+      gap: 8px 10px; background: #fff; border-radius: 8px;
+      margin-bottom: 10px; padding: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    }
+    tr.data-row.no-actions {
+      grid-template-areas: "check name size";
+    }
+    tr.data-row td { border: none; padding: 0; font-size: 14px; }
+    td.check { grid-area: check; width: auto; }
+    td.name { grid-area: name; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    td.name a { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    td.size { grid-area: size; color: #999; font-size: 12px; white-space: nowrap; }
+    td.download { grid-area: actions; justify-self: end; }
+    td.download a { padding: 4px 8px; font-size: 12px; }
+    #empty-filter { display: block; }
+    #empty-filter td { display: block; }
   }
 </style>
 </head>
@@ -133,6 +177,9 @@
     <span class="crumbs">当前位置：{{ breadcrumb | safe }}</span>
     {% if items %}
     <input type="text" id="filter" placeholder="过滤文件名…" oninput="filterRows(this.value)">
+    {% if is_admin %}
+    <button type="button" class="zipbtn" onclick="mkdirPrompt()">新建文件夹</button>
+    {% endif %}
     {% if zip_on %}
     <button type="button" class="zipbtn" id="zipbtn" onclick="downloadZip()" disabled>打包下载</button>
     {% endif %}
@@ -143,7 +190,7 @@
   <table>
     <tr>{% if zip_on %}<th class="check"><input type="checkbox" id="check-all" onclick="toggleAll(this)"></th>{% endif %}<th>名称</th><th>大小</th><th class="mtime">修改时间</th><th></th></tr>
     {% for it in items %}
-    <tr class="data-row" data-name="{{ it.name }}">
+    <tr class="data-row{{ ' no-actions' if it.is_dir else '' }}" data-name="{{ it.name }}">
       {% if zip_on %}<td class="check"><input type="checkbox" class="row-check" value="{{ it.rel }}" onchange="updateZipBtn()"></td>{% endif %}
       <td class="name">
         {% if it.is_dir %}
@@ -156,12 +203,12 @@
       </td>
       <td class="size">{{ it.size }}</td>
       <td class="mtime">{{ it.mtime }}</td>
+      {% if not it.is_dir %}
       <td class="download">
-        {% if not it.is_dir %}
-        {% if share_on %}<a href="javascript:;" onclick="shareLink('{{ it.share_url }}')">分享</a>{% endif %}
+        {% if share_on %}<a href="javascript:;" onclick='shareLink({{ it.share_url|tojson }}, {{ it.name|tojson }})'>分享</a>{% endif %}
         <a href="{{ it.download_url }}" onclick='toast("已开始下载：" + {{ it.name|tojson }}, "success")'>下载</a>
-        {% endif %}
       </td>
+      {% endif %}
     </tr>
     {% endfor %}
     <tr id="empty-filter" style="display:none"><td colspan="{% if zip_on %}5{% else %}4{% endif %}" class="empty">没有匹配的文件</td></tr>
@@ -175,6 +222,14 @@
   <span class="lb-close">&times;</span>
   <img id="lb-img" alt="" onclick="event.stopPropagation()">
   <div id="lb-caption" class="lb-caption" onclick="event.stopPropagation()"></div>
+</div>
+<div id="share-modal" class="share-modal" onclick="closeShareModal()">
+  <div class="sm-box" onclick="event.stopPropagation()">
+    <div class="sm-title">扫码访问（链接已复制）</div>
+    <img id="qr-img" alt="">
+    <div id="sm-name" class="sm-url"></div>
+    <button type="button" class="zipbtn sm-close" onclick="closeShareModal()">关闭</button>
+  </div>
 </div>
 <div id="toast-box" class="toast-box"></div>
 <div id="toast-init" data-notice='{{ notice|tojson }}' style="display:none"></div>
@@ -236,11 +291,43 @@ function doUpload(input) {
     });
   }).catch(function() { toast('上传请求失败', 'error'); });
 }
-function shareLink(url) {
+function managePost(url, fd, okMsg) {
+  return fetch(url, { method: 'POST', body: fd }).then(function(r) {
+    return r.json().then(function(data) {
+      if (!r.ok || !data.ok) {
+        toast(okMsg + '失败：' + (data.error || ('HTTP ' + r.status)), 'error');
+        return;
+      }
+      toast(okMsg + '成功', 'success');
+      setTimeout(function() { location.reload(); }, 800);
+    });
+  }).catch(function() { toast(okMsg + '请求失败', 'error'); });
+}
+function mkdirPrompt() {
+  var name = prompt('新文件夹名称：');
+  if (name === null) return;
+  name = name.trim();
+  if (!name) { toast('文件夹名称不能为空', 'error'); return; }
+  var fd = new FormData();
+  fd.append('rel', {{ rel|tojson }});
+  fd.append('name', name);
+  managePost({{ url_for('mkdir')|tojson }}, fd, '新建文件夹');
+}
+function shareLink(url, name) {
   copyText(url).then(
     function() { toast('分享链接已复制到剪贴板', 'success'); },
     function() { prompt('自动复制失败，请手动复制：', url); }
   );
+  if (window.matchMedia('(max-width: 600px)').matches) {
+    document.getElementById('qr-img').src = {{ url_for('qr_image')|tojson }} + '?d=' + encodeURIComponent(url);
+    document.getElementById('sm-name').textContent = name || url;
+    document.getElementById('share-modal').style.display = 'flex';
+  }
+}
+function closeShareModal() {
+  var m = document.getElementById('share-modal');
+  m.style.display = 'none';
+  document.getElementById('qr-img').src = '';
 }
 function toggleAll(box) {
   document.querySelectorAll('.row-check').forEach(function(b) { b.checked = box.checked; });
@@ -304,7 +391,7 @@ function closePreview() {
   document.getElementById('lb-img').src = '';
 }
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closePreview();
+  if (e.key === 'Escape') { closePreview(); closeShareModal(); }
 });
 (function() {
   var init = document.getElementById('toast-init');
