@@ -40,7 +40,7 @@ else:
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 
 # 当前版本号（发布新版本时同步修改，并打同名 git tag）
-VERSION = "1.0.5"
+VERSION = "1.0.6"
 
 # 支持点击文件名直接预览的图片扩展名
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".ico"}
@@ -435,6 +435,7 @@ def create_app(cfg):
         return render_template(
             "list.html",
             items=items,
+            rel=rel,
             breadcrumb="".join(crumbs),
             refresh_url=request.path,
             notice=session.pop("notice", None),
@@ -499,6 +500,29 @@ def create_app(cfg):
             return send_file(target)
         return send_file(target, as_attachment=True)
 
+    @app.route("/upload", methods=["POST"])
+    def upload():
+        """管理员上传文件到分享目录（可指定当前子目录），文件名冲突时自动加序号。"""
+        if session.get("role") != "admin":
+            abort(403)
+        root = Path(cfg["share_dir"]).resolve()
+        rel = request.form.get("rel", "")
+        folder = safe_join(root, rel) if rel else root
+        if folder is None or not folder.is_dir():
+            abort(404)
+        saved = []
+        for f in request.files.getlist("files"):
+            # 只取文件名部分，防止路径穿越
+            name = Path(f.filename or "").name
+            if not name or name in (".", ".."):
+                continue
+            target = unique_path(folder, name)
+            f.save(target)
+            saved.append(target.name)
+        if not saved:
+            return {"ok": False, "error": "没有可保存的文件"}, 400
+        return {"ok": True, "saved": saved}
+
     @app.route("/download-zip", methods=["POST"])
     def download_zip():
         """把勾选的文件/文件夹打包成 zip 下载，文件夹递归包含。"""
@@ -541,6 +565,19 @@ def create_app(cfg):
         return render_template("error.html", code=403, message="没有权限访问"), 403
 
     return app
+
+
+def unique_path(folder, name):
+    """同一目录下已有同名文件时，自动追加 (1)(2)… 序号，避免覆盖。"""
+    candidate = folder / name
+    if not candidate.exists():
+        return candidate
+    stem, suffix = Path(name).stem, Path(name).suffix
+    for i in range(1, 1000):
+        candidate = folder / f"{stem} ({i}){suffix}"
+        if not candidate.exists():
+            return candidate
+    return folder / f"{stem}-{secrets.token_hex(4)}{suffix}"
 
 
 def human_size(n):

@@ -19,6 +19,7 @@
   .toplinks a { font-size: 13px; color: #999; text-decoration: none; margin-left: 14px; }
   .toplinks a:hover { color: #667eea; }
   .toplinks a.settings { color: #667eea; }
+  .toplinks img.ticon { width: 15px; height: 15px; vertical-align: -2px; margin-right: 2px; }
   .topbar {
     display: flex; align-items: center; gap: 10px;
     background: #fff; padding: 8px 14px; border-radius: 8px;
@@ -114,10 +115,11 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>📂 文件共享</h1>
+    <h1><img class="icon" style="width:22px;height:22px;vertical-align:-4px;" src="/assets/icon-folder.jpeg" alt=""> 文件共享</h1>
     <div class="toplinks">
       {% if is_admin %}
-      <a class="settings" href="{{ url_for('settings') }}">⚙️ 设置</a>
+      <a href="javascript:;" onclick="pickUpload()"><img class="ticon" src="/assets/上传图标.png" alt="">上传</a>
+      <a class="settings" href="{{ url_for('settings') }}"><img class="ticon" src="/assets/设置图标.png" alt="">设置</a>
       <a href="{{ url_for('logout') }}">退出登录</a>
       {% elif not password_on %}
       <a class="settings" href="{{ url_for('login', next=request.path) }}">管理员登录</a>
@@ -126,6 +128,7 @@
       {% endif %}
     </div>
   </header>
+  <input type="file" id="upload-input" multiple style="display:none" onchange="doUpload(this)">
   <div class="topbar">
     <span class="crumbs">当前位置：{{ breadcrumb | safe }}</span>
     {% if items %}
@@ -209,6 +212,29 @@ function toast(msg, type) {
     el.classList.add('out');
     setTimeout(function() { el.parentNode && el.parentNode.removeChild(el); }, 300);
   }, 2600);
+}
+function pickUpload() {
+  var inp = document.getElementById('upload-input');
+  inp.value = '';
+  inp.click();
+}
+function doUpload(input) {
+  var files = input.files;
+  if (!files.length) return;
+  var fd = new FormData();
+  for (var i = 0; i < files.length; i++) fd.append('files', files[i]);
+  fd.append('rel', {{ rel|tojson }});
+  toast('正在上传 ' + files.length + ' 个文件…');
+  fetch({{ url_for('upload')|tojson }}, { method: 'POST', body: fd }).then(function(r) {
+    return r.json().then(function(data) {
+      if (!r.ok || !data.ok) {
+        toast('上传失败：' + (data.error || ('HTTP ' + r.status)), 'error');
+        return;
+      }
+      toast('上传成功：' + data.saved.join('、'), 'success');
+      setTimeout(function() { location.reload(); }, 800);
+    });
+  }).catch(function() { toast('上传请求失败', 'error'); });
 }
 function shareLink(url) {
   copyText(url).then(
